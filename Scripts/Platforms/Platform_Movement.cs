@@ -76,7 +76,7 @@ public class Platform_Movement : MonoBehaviour {
 	GameObject timerObj;
 
 
-	List<GameObject> collidingObjects;
+	public List<GameObject> collidingObjects;
 	public List<GameObject> CollidingObjects { get { return collidingObjects; } }
 
 	PlayerHandler.PlayerState playerState;
@@ -91,10 +91,14 @@ public class Platform_Movement : MonoBehaviour {
 
 	Vector3 worldStartingPosition;	// literally where the platform is in world space; set at start
 
+	float distanceValue;
+	//int oldObjectListCount = 0;
 
 	public SavingLoading_StorageKeyCheck saveLoad;
 
 	void Start () {
+
+		distanceValue = transform.localScale.x * 20 * 6;
 
 		// Event Triggers
 		if(saveLoad)
@@ -132,10 +136,20 @@ public class Platform_Movement : MonoBehaviour {
 	}
 
 	void Update(){
-		
+
+		//if (oldObjectListCount > collidingObjects.Count)
+		//{
+		//	print ("Removed object");
+		//}
+		//else if (oldObjectListCount < collidingObjects.Count)
+		//{
+		//	print ("Added object");
+		//}
+		//oldObjectListCount = collidingObjects.Count;
+
 		foreach (GameObject obj in collidingObjects) {
 
-			if (Vector3.Distance (obj.transform.position, transform.position) > 5) {
+			if (Vector3.Distance (obj.transform.position, transform.position) > distanceValue) {
 				
 				StartCoroutine(RemoveObjectFromList(obj));
 
@@ -189,8 +203,77 @@ public class Platform_Movement : MonoBehaviour {
 
 	}
 
+	void OnTriggerEnter(Collider col){
+
+		if (col.gameObject.tag != "Player" && !collidingObjects.Contains(col.gameObject) && !col.isTrigger) {	// no player's for you and no duplicates
+			collidingObjects.Add (col.gameObject);
+		}
+
+		// Wait for the player to jump onto the platform, then start
+		if (startType == PLATFORMTYPE.WAIT && col.gameObject.tag == "Player") {
+
+			// stop the cooldown that resets the platform if player is on platform
+			StopCoroutine ("WaitTypeCooldown");
+
+			if(!moving)
+				ForceStart ();
+
+		}
+		 
+	}
+
+	void OnTriggerStay(Collider col){
+
+		if (col.gameObject.tag != "Player" && !collidingObjects.Contains(col.gameObject) && !col.isTrigger) {	// no player's for you and no duplicates
+			collidingObjects.Add (col.gameObject);
+		}
+
+	}
+
+	void OnTriggerExit(Collider col){
+
+		StartCoroutine(RemoveObjectFromList (col.gameObject));
+
+		if(col.tag == "PushBall")
+
+		if (startType == PLATFORMTYPE.WAIT && col.gameObject.tag == "Player") {
+
+			// start a cooldown to reset the platform
+			StartCoroutine("WaitTypeCooldown");
+
+		}
+	}
+
+	IEnumerator WaitTypeCooldown(){
+
+		//dsfgsf
+
+		float cooldown = waitDelay;
+
+		while (cooldown > 0) {
+			
+			cooldown -= Time.deltaTime;
+
+			yield return new WaitForEndOfFrame ();
+
+		}
+
+		transform.position = worldStartingPosition;
+
+		ForceEnd ();
+
+	}
+
+	IEnumerator RemoveObjectFromList(GameObject obj){
+
+		yield return new WaitForEndOfFrame ();
+
+		collidingObjects.Remove (obj);
+
+	}
+
 	IEnumerator MoveTowardOnce(Transform newPos){
-		
+
 		Vector3 distance = Vector3.zero;
 
 		if (!lerping)
@@ -202,7 +285,7 @@ public class Platform_Movement : MonoBehaviour {
 
 			while (Time.timeScale == 0)
 				yield return new WaitForEndOfFrame ();
-			
+
 			if (lerping) {
 
 				transform.position = Vector3.Lerp (transform.position, newPos.position, Time.deltaTime * moveSpeed);
@@ -238,11 +321,11 @@ public class Platform_Movement : MonoBehaviour {
 			Vector3 lastPosition = transform.position;
 
 			if (lerping) {
-				
+
 				transform.position = Vector3.Lerp (transform.position, newPos.position, Time.deltaTime * moveSpeed);
 
 			} else {
-				
+
 				transform.position += (distance / 100) * moveSpeed;
 
 			}
@@ -272,16 +355,16 @@ public class Platform_Movement : MonoBehaviour {
 			counter = pauseTime;
 
 		while (counter > 0 && pausing) {
-		
+
 			counter -= Time.deltaTime;
-		
+
 			yield return new WaitForEndOfFrame ();
 		}
 
 		if (reversing) {
-			
+
 			if (reverseBool) {
-				
+
 				if (positionCounter - 1 > 0) {
 					positionCounter -= 1;
 				} else if (positionCounter - 1 <= 0 && looping) {	// only loop if you are allowed to
@@ -290,7 +373,7 @@ public class Platform_Movement : MonoBehaviour {
 				}
 				else
 					yield return null;
-				
+
 			} else {
 
 				if (positionCounter + 1 < Positions.Count) {
@@ -302,9 +385,9 @@ public class Platform_Movement : MonoBehaviour {
 				}
 
 			}
-			
+
 		} else {
-			
+
 			if (positionCounter + 1 < Positions.Count) {
 				positionCounter += 1;
 			}
@@ -313,74 +396,12 @@ public class Platform_Movement : MonoBehaviour {
 			}
 			else 
 				yield return null;
-			
+
 		}
 
 		coroutine = MoveToward (Positions [positionCounter]);
 
 		StartCoroutine (coroutine);
-
-	}
-
-	void OnTriggerEnter(Collider col){
-
-		if (col.gameObject.tag != "Player" && !collidingObjects.Contains(col.gameObject) && !col.isTrigger) {	// no player's for you and no duplicates
-			collidingObjects.Add (col.gameObject);
-		}
-
-		// Wait for the player to jump onto the platform, then start
-		if (startType == PLATFORMTYPE.WAIT && col.gameObject.tag == "Player") {
-
-			// stop the cooldown that resets the platform if player is on platform
-			StopCoroutine ("WaitTypeCooldown");
-
-			if(!moving)
-				ForceStart ();
-
-		}
-		 
-	}
-
-	void OnTriggerExit(Collider col){
-
-		StartCoroutine(RemoveObjectFromList (col.gameObject));
-
-		if (startType == PLATFORMTYPE.WAIT && col.gameObject.tag == "Player") {
-
-			// start a cooldown to reset the platform
-			StartCoroutine("WaitTypeCooldown");
-
-		}
-	}
-
-
-	IEnumerator WaitTypeCooldown(){
-
-		//dsfgsf
-
-		float cooldown = waitDelay;
-
-		while (cooldown > 0) {
-			
-			cooldown -= Time.deltaTime;
-
-			yield return new WaitForEndOfFrame ();
-
-		}
-
-		transform.position = worldStartingPosition;
-
-		ForceEnd ();
-
-	}
-
-
-
-	IEnumerator RemoveObjectFromList(GameObject obj){
-
-		yield return new WaitForEndOfFrame ();
-
-		collidingObjects.Remove (obj);
 
 	}
 }

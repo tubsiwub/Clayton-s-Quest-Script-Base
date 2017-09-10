@@ -6,12 +6,14 @@ using UnityEngine.UI;
 public class Hourglass_Spin : MonoBehaviour {
 
 	ActivatedTimer timerRef;
+	Animator animator;
 
 	bool timerEnabled = false;
 
 	void Start(){
 
 		timerRef = transform.parent.GetComponent<ActivatedTimer> ();
+		animator = GetComponent<Animator> ();
 
 		// Events
 		timerRef.OnTimerStart += StartTimer;
@@ -26,7 +28,8 @@ public class Hourglass_Spin : MonoBehaviour {
 		
 		timerEnabled = true;
 
-		GetComponent<Animator> ().SetBool ("Timer", timerEnabled);
+		if (animator.isInitialized)
+			animator.SetBool ("Timer", timerEnabled);
 
 		GetComponent<Image> ().enabled = timerEnabled;
 
@@ -36,7 +39,8 @@ public class Hourglass_Spin : MonoBehaviour {
 
 		timerEnabled = false;
 
-		GetComponent<Animator> ().SetBool ("Timer", timerEnabled);
+		if (animator.isInitialized)
+			animator.SetBool ("Timer", timerEnabled);
 
 		GetComponent<Image> ().enabled = timerEnabled;
 

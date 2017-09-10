@@ -115,6 +115,7 @@ public class ActivatedTimerEditor : Editor {
 
 			startZone.objectReferenceValue = null;
 			triggerObj.objectReferenceValue = null;
+			puzzleButton.objectReferenceValue = null;
 
 		}
 
@@ -124,6 +125,7 @@ public class ActivatedTimerEditor : Editor {
 
 			startZone.objectReferenceValue = null;
 			triggerObj.objectReferenceValue = null;
+			questNPC.objectReferenceValue = null;
 
 		}
 

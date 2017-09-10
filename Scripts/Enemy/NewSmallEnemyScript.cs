@@ -71,6 +71,10 @@ public class NewSmallEnemyScript : Enemy {
 
 	string storageKey = "";
 
+	float attackCooldown = 1.5f;
+
+	bool firedEvent = false;
+
 	void Start () {
 
 		// Set parent values
@@ -104,6 +108,17 @@ public class NewSmallEnemyScript : Enemy {
 			if (SavingLoading.instance.CheckStorageKeyStatus (storageKey))
 				Destroy (this.gameObject);
 		}
+
+		HealthManager.instance.OnDeath += PlayerDied;
+	}
+
+	void OnDestroy()
+	{
+		RemoveEvents();
+	}
+
+	void RemoveEvents(){
+		HealthManager.instance.OnDeath -= PlayerDied;
 	}
 
 	void MoveTarget(){
@@ -163,6 +178,33 @@ public class NewSmallEnemyScript : Enemy {
 
 	Vector3 newRotation;
 
+	void PlayerDied(){
+		StartCoroutine("ResetEnemy_e");
+	}
+
+	IEnumerator ResetEnemy_e(){
+
+		yield return new WaitForSeconds (3.0f);
+	
+		ResetEnemy ();
+
+	}
+
+	void ResetEnemy(){
+
+		animator.ResetTrigger ("Grr");
+		animator.ResetTrigger ("Alerted");
+		animator.ResetTrigger ("Attacked");
+		animator.SetBool ("Attacking", false);
+		animator.SetBool ("Moving", false);
+		animator.SetBool ("Chasing", false);
+		animator.SetFloat ("Distance", 999);
+
+		stateScript.STATE = "wander";
+
+		MoveTarget ();
+
+	}
 
 	void Update () {
 		
@@ -213,7 +255,9 @@ public class NewSmallEnemyScript : Enemy {
 
 			}
 
+
 			animator.SetFloat ("Distance", enemyDistance);
+
 
 
 			f_playerDetectionTimeout -= Time.deltaTime;
@@ -519,21 +563,21 @@ public class NewSmallEnemyScript : Enemy {
 
 
 
+			if(!animator.GetBool("Attacking")){
+				if (!b_foundPlayer) { 
 
-			if (!b_foundPlayer) { 
+					stateScript.STATE = "wander";
 
-				stateScript.STATE = "wander";
+				}
 
-			}
+				if(enemyDistance >= f_distanceToAttack){
 
-			if(enemyDistance >= f_distanceToAttack){
+					animator.SetBool("Moving", true);
+					animator.SetBool("Chasing", true);
 
-				animator.SetBool("Attacking", false);
-				animator.SetBool("Moving", true);
-				animator.SetBool("Chasing", true);
+					stateScript.STATE = "chase";
 
-				stateScript.STATE = "chase";
-
+				}
 			}
 
 
@@ -548,8 +592,6 @@ public class NewSmallEnemyScript : Enemy {
 			// Set gaze to player
 			originMarker.transform.position = playerObj.transform.position;
 
-			//animator.Play("smallenemy_run");
-			animator.SetBool("Attacking", false);
 			animator.SetBool("Moving", true);
 			animator.SetBool("Chasing", true);
 
@@ -577,7 +619,7 @@ public class NewSmallEnemyScript : Enemy {
 			}
 			else {
 
-				animator.SetBool("Attacking", false);
+				//animator.SetBool("Attacking", false);
 
 			}
 			#endregion
@@ -604,7 +646,7 @@ public class NewSmallEnemyScript : Enemy {
 
 							} else {
 								
-								stateScript.STATE = "wander";
+								//stateScript.STATE = "wander";
 
 							}
 						}
@@ -707,8 +749,6 @@ public class NewSmallEnemyScript : Enemy {
 
 	}
 
-	float attackCooldown = 1.5f;
-
 	void HitPlayer()
 	{
 		if (PUSHABLE)
@@ -719,8 +759,6 @@ public class NewSmallEnemyScript : Enemy {
 				HealthManager.instance.LoseALifeAndPushAway(pushDir, 10);
 		}
 	}
-
-	bool firedEvent = false;
 
 	IEnumerator KillEnemy(float time){
 
@@ -764,6 +802,9 @@ public class NewSmallEnemyScript : Enemy {
 			yield return new WaitForEndOfFrame ();
 		}
 
+		// Remove event
+		RemoveEvents();
+
 		// Hide the body
 		Destroy(transform.parent.transform.gameObject);
 
@@ -800,6 +841,9 @@ public class NewSmallEnemyScript : Enemy {
 			rb.AddForce (pushDir * 40, ForceMode.Impulse);
 
 			health -= damageAmount;
+
+			if (stateScript.STATE == "attack")
+				HitPlayer ();
 
 			DamageCheck ();
 		}
@@ -933,13 +977,19 @@ public class NewSmallEnemyScript : Enemy {
 	void OnTriggerEnter(Collider col){
 
 		// Hurt player when enemies get touched
-		if (col.transform.tag == "Player") {
+		if (col.tag == "Player") {
 			HitPlayer ();
 		}
 
 		// Hurt player when enemies get touched
-		if (col.transform.tag == "Water") {
+		if (col.tag == "Water") {
 			KillEnemy ();
+		}
+
+		if (col.tag == "EnemyBoundary") {
+			b_foundPlayer = false;
+			stateScript.STATE = "wander";
+			MoveTarget ();
 		}
 
 	}

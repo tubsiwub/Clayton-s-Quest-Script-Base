@@ -8,25 +8,18 @@ public class Item_SceneBobble : MonoBehaviour {
 	public float rotateRotSpeed;
 	public float bobMaxHeight, bobShiftSpeed;
 
-	void Enable() {
-		
-		StartCoroutine (TiltAngle(tiltMaxAngle, tiltTiltSpeed));
-		StartCoroutine (RotateInCircle(rotateRotSpeed));
-		StartCoroutine (BobUpAndDown(bobMaxHeight, bobShiftSpeed));
-
-	}
-
 	void Start () {
 
+		StartCoroutine ("WaitAFrame");
+	}
+
+	IEnumerator WaitAFrame(){
+
+		yield return new WaitForEndOfFrame ();
+
 		StartCoroutine (TiltAngle(tiltMaxAngle, tiltTiltSpeed));
 		StartCoroutine (RotateInCircle(rotateRotSpeed));
 		StartCoroutine (BobUpAndDown(bobMaxHeight, bobShiftSpeed));
-
-	}
-
-	void OnEnable () {
-
-		Enable();
 	}
 
 	void OnDisable () {

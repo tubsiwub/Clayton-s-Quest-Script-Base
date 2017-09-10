@@ -9,13 +9,9 @@ public class BounceCollider : MonoBehaviour
 	[SerializeField] Transform bouncePointHeight;
 	[SerializeField] Animator animator;
 	[SerializeField] string animationName = "Bounce";
-	[SerializeField] bool invisibleObject;
 
-	void Awake()
-	{
-		if (invisibleObject && GetComponent<Renderer>())
-			GetComponent<Renderer>().enabled = false;
-	}
+	int lastBounceStamp = 0;
+	bool BouncedRecently { get { return Time.frameCount - lastBounceStamp <= 5; } }
 
 	void OnTriggerStay(Collider obj)
 	{
@@ -25,13 +21,14 @@ public class BounceCollider : MonoBehaviour
 				return;
 
 			PlayerHandler playerHandler = obj.GetComponent<PlayerHandler>();
-			if (playerHandler.IsFalling())
+			if (playerHandler.IsFalling() && !BouncedRecently)
 				Bounce(playerHandler);
 		}
 	}
 
 	void Bounce(PlayerHandler playerHandler)
 	{
+		lastBounceStamp = Time.frameCount;
 		playerHandler.DoHighJump(pressHeight, noPressHeight);
 
 		if (animator != null)

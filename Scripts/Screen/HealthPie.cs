@@ -18,14 +18,31 @@ public class HealthPie : MonoBehaviour
 		}
 	}
 
-	public void LoseABar(int health)
+	public void LoseABar(int health, bool stopCoroutines = true)
 	{
-		StopAllCoroutines();
+		if (stopCoroutines)
+			StopAllCoroutines();
 
 		int barToFade = Mathf.Abs(health - 4);
 
 		if (healthBars[barToFade].color.a == 1)
 			StartCoroutine(FadeOutBar(barToFade));
+	}
+
+	public void LoseBars(int amount)
+	{
+		StopAllCoroutines();
+
+		int livesToSend = HealthManager.totalLives;
+		for (int i = 0; i < amount; i++)
+		{
+			livesToSend--;
+		
+			if (livesToSend < 0)
+				livesToSend = 0;
+		
+			LoseABar(livesToSend, false);
+		}
 	}
 
 	public void LoseAllBars()

@@ -118,6 +118,15 @@ public class Platform_MovementEditor : Editor {
 
 		GUILayout.Space(24.0f);
 
+		EditorGUILayout.LabelField ("Num Obj in List: " + mainScript.collidingObjects.Count);
+
+		for (int i = 0; i < mainScript.collidingObjects.Count; i++)
+		{
+			EditorGUILayout.LabelField ("Obj " + i + ": " + mainScript.collidingObjects[i]);
+		}
+
+		GUILayout.Space(24.0f);
+
 
 		#region PLATFORM POSITIONS
 

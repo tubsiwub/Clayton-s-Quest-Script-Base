@@ -4,18 +4,12 @@ using System.Collections;
 using System;
 using XInputDotNetPure;
 
-// Placement:  Place on 'Player' gameobject
-
-// Function:  Contains all movement and input information
-
-
-
-// grounded -- slightly weaken controls for air movement
-// disable controls -- when climbing up a slope that is tooooo high 
-
 public class BallController : PlayerController
 {
 	[SerializeField] Collider hitTrigger;
+	[SerializeField] ParticleSystem ballRollDust;
+	[SerializeField] GameObject slamParticle;
+	[SerializeField] GameObject chargeParticle;
 
 	BallCollider ballCollider;
 	Quaternion floorRot;
@@ -28,6 +22,9 @@ public class BallController : PlayerController
 	const float changeInVelDot = 0.25f;
 	float maxVelocity = MAX_VELOCITY;
 
+	float hitTriggerStartSize;
+	float hitTriggerSlamSize;
+
 	float extraGravity;
 	const float regExtraGravity = 0.25f;
 	const float slamExtraGravity = 2.5f;
@@ -37,8 +34,12 @@ public class BallController : PlayerController
 	const float resistiveDrag = 2.5f;    // slow-down drag
 	const float stickFloorIntensity = 20;
 	const float neededHeightForBallSlam = 1.75f;
-	const float lowNeededHeightForBallSlam = 0.75f;
+	const float lowNeededHeightForBallSlam = 0.88f;
 	const int maxSlideTime = 15;
+
+	Vector3 lastPos;
+	Vector3 distanceInFrame;
+	public Vector3 Distance { get { return distanceInFrame; } }
 
 	bool pressingJump = false;
 	bool pressingJumpDown = false;
@@ -96,6 +97,10 @@ public class BallController : PlayerController
 		capsuleStartRadius = capsuleCollider.radius;
 		handsAvailable = false;
 		isPhysicsControlled = true;
+
+		SphereCollider sphere = (SphereCollider)hitTrigger;
+		hitTriggerStartSize = sphere.radius;
+		hitTriggerSlamSize = hitTriggerStartSize * 3;
 	}
 	
 	/*void OnGUI()
@@ -201,7 +206,8 @@ public class BallController : PlayerController
 
 		Vector3 movement = GetMovement(input, floorRot) * acceleration;
 
-		if (!IsSlamming) HandleJump();
+		if (!IsSlamming && !IsJumpFrozen)
+			HandleJump();
 
 		Vector3 flatVel = rb.velocity; flatVel.y = 0;
 		float flatSpeed = flatVel.magnitude;
@@ -219,6 +225,9 @@ public class BallController : PlayerController
 			rb.velocity = flatVel;
 		}
 
+		if (horizontalFrozen)
+			rb.velocity = new Vector3(0, rb.velocity.y, 0);
+
 		MovementLimits(input);
 		AddGravity();
 		HandleFalling();
@@ -226,7 +235,16 @@ public class BallController : PlayerController
 		if (!IsSlamming)
 			SetHitTriggerFromSpeed();
 
+		if (!isFrozen)
+			SetMotionParticleFromSpeed();
+
 		speedThisFrame = CalcSpeed;
+
+		Vector3 potentialDistance = transform.position - lastPos;
+		if (potentialDistance.magnitude > 0.01f)
+			distanceInFrame = potentialDistance;
+
+		lastPos = transform.position;
 	}
 
 	void HandleCollision()
@@ -316,7 +334,17 @@ public class BallController : PlayerController
 			SLAM();
 		else
 		{
-			rb.AddForce(Vector3.down * extraGravity, ForceMode.VelocityChange); // add extra gravity
+			//if (airState == AirState.Air)
+				rb.AddForce(Vector3.down * extraGravity, ForceMode.VelocityChange); // add extra gravity
+			//else
+			//	rb.AddForce(Vector3.down * (extraGravity * 0.5f), ForceMode.VelocityChange); // still add extra gravity, just... less
+
+			//if (pressingJumpDown)
+			//{
+			//	// gotta add extra gravity TWICE, to make up for the fact it's no longer being added while we're grounded
+			//	rb.AddForce(Vector3.down * extraGravity, ForceMode.VelocityChange);
+			//	rb.AddForce(Vector3.down * extraGravity, ForceMode.VelocityChange);
+			//}
 
 			if (rb.velocity.y < -maxFallSpeed)
 				rb.velocity = new Vector3(rb.velocity.x, -maxFallSpeed, rb.velocity.z);
@@ -325,11 +353,12 @@ public class BallController : PlayerController
 
 	void HandleFalling()
 	{
-		if (rb.velocity.y <= -maxFallSpeed && !atMaxVel && !IsSlamming)
+		if (rb.velocity.y <= -maxFallSpeed && !atMaxVel)// && !IsSlamming)
 		{
 			playerHandler.AtMaxFallSpeed();
 			atMaxVel = true;
 		}
+
 		if (rb.velocity.y > -maxFallSpeed && atMaxVel)
 		{
 			playerHandler.Landed();
@@ -340,16 +369,32 @@ public class BallController : PlayerController
 	void SLAM()
 	{
 		if (CanDoHighJump())
+		{
+			SoundManager.instance.PlayClip("BallSlam");
+
 			rb.velocity = new Vector3(rb.velocity.x, slamJumpHeight, rb.velocity.z);
+			GameObject particle = Instantiate(slamParticle, transform.position, Quaternion.identity);
+			Destroy(particle, 2);
+
+			CancelChargeParticle();
+		}
 
 		extraGravity = regExtraGravity;
 		afterSlamStamp = Time.frameCount;
 
+		SetHitTriggerSize(hitTriggerStartSize);
+		
 		hitTrigger.enabled = false;
 		HealthManager.instance.SetExternalIsInvincible(false);
 
 		if (PlayerHandler.AllowVibration)
 			StartCoroutine(Rumble(0.2f, 1, 1));
+	}
+
+	void SetHitTriggerSize(float size)
+	{
+		SphereCollider sphere = (SphereCollider)hitTrigger;
+		sphere.radius = size;
 	}
 
 	IEnumerator Rumble(float time, float leftMotor, float rightMotor)
@@ -371,6 +416,27 @@ public class BallController : PlayerController
 			hitTrigger.enabled = enableHitTrigger;
 			HealthManager.instance.SetExternalIsInvincible(enableHitTrigger);
 		}
+	}
+
+	void SetMotionParticleFromSpeed(bool turnOffDirect = false)
+	{
+		bool turnOn = speedThisFrame > 0.01f;
+		if (!IsGrounded()) turnOn = false;
+		if (IsSlamming || JustSlammed) turnOn = false;
+		if (turnOffDirect) turnOn = false;
+
+		bool turnOnSound = false;
+		if (turnOn) turnOnSound = speedThisFrame > 0.1f;
+
+		var main = ballRollDust.main;
+		Color col = main.startColor.color;
+		main.startColor = new Color(col.r, col.g, col.b, turnOn ? 1 : 0);
+
+		if (turnOnSound && !SoundManager.instance.HasLoopingClip)
+			SoundManager.instance.PlayClipLooping("RollingBall");
+		
+		if (!turnOnSound && SoundManager.instance.HasLoopingClip)
+			SoundManager.instance.FadeOutLoopingClip();
 	}
 
 	bool CanDoHighJump()	// not about to land on steep slope
@@ -413,6 +479,7 @@ public class BallController : PlayerController
 		// calc this AS SOON AS we start, otherwise it has to wait until end of fixed update
 		speedThisFrame = CalcSpeed;
 		hitTrigger.enabled = false;
+		SetHitTriggerSize(hitTriggerStartSize);
 		HealthManager.instance.SetExternalIsInvincible(false);
 
 		rb.isKinematic = false;
@@ -434,9 +501,11 @@ public class BallController : PlayerController
 	{
 		SetInterpolation(RigidbodyInterpolation.Interpolate);
 
+		SoundManager.instance.EndClipLooping();
 		KillVelocity();
 
 		hitTrigger.enabled = false;
+		SetHitTriggerSize(hitTriggerStartSize);
 		HealthManager.instance.SetExternalIsInvincible(false);
 
 		ballCollider.DisableMovingPlatform();
@@ -444,6 +513,7 @@ public class BallController : PlayerController
 
 		extraGravity = regExtraGravity;
 		isFrozen = false;
+		atMaxVel = false;
 
 		rb.isKinematic = true;
 		rb.useGravity = false;
@@ -453,6 +523,12 @@ public class BallController : PlayerController
 		enableReJump = false;
 		storedJumpInput = false;
 		enabled = false;
+
+		playerHandler.Landed();
+		atMaxVel = false;
+
+		SetMotionParticleFromSpeed(true);
+		CancelChargeParticle();
 
 		airState = AirState.Nothing;
 	}
@@ -503,13 +579,36 @@ public class BallController : PlayerController
 		rb.useGravity = !isFrozen;
 	}
 
+	public override void SetFreezeJump(bool frozen)
+	{
+		base.SetFreezeJump(frozen);
+	
+		if (IsJumpFrozen)
+			CancelBallSlam(false);
+	}
+
+	public override void SetHorizontalFrozen(bool frozen)
+	{
+		horizontalFrozen = frozen;
+
+		if (horizontalFrozen)
+			rb.velocity = new Vector3(0, rb.velocity.y, 0);
+	}
+
 	public void CancelBallSlam(bool killVelocity)
 	{
+		CancelChargeParticle();
 		extraGravity = regExtraGravity;
 		isFrozen = false;
 
 		if (killVelocity)
 			KillVelocity();
+	}
+
+	void CancelChargeParticle()
+	{
+		StopCoroutine("ShowChargeParticle");
+		chargeParticle.transform.localScale = Vector3.zero;
 	}
 
 	public bool StartBallSlam(bool doExtraLongPause, float neededDist = neededHeightForBallSlam)
@@ -518,9 +617,13 @@ public class BallController : PlayerController
 		float distDown = transform.position.y - floorPoint;
 
 		if (atMaxVel) return false;
+		if (IsJumpFrozen) return false;
 
 		if (distDown > neededDist)
 		{
+			const float ParticleExtraSpeed = 1.5f;
+			StartCoroutine("ShowChargeParticle", doExtraLongPause ? 1 : ParticleExtraSpeed);
+
 			DoBallSlam(doExtraLongPause, floorPoint);
 			return true;
 		}
@@ -536,6 +639,8 @@ public class BallController : PlayerController
 		StartCoroutine("FreezeThenSlam", doExtraLongPause);
 
 		hitTrigger.enabled = true;
+		SetHitTriggerSize(hitTriggerSlamSize);
+
 		HealthManager.instance.SetExternalIsInvincible(true);
 	}
 
@@ -555,6 +660,7 @@ public class BallController : PlayerController
 			rb.useGravity = false;
 			yield return null;
 		}
+
 		rb.useGravity = true;
 		isFrozen = false;
 		enableReJump = false;
@@ -562,20 +668,43 @@ public class BallController : PlayerController
 		extraGravity = slamExtraGravity;
 	}
 
+	IEnumerator ShowChargeParticle(float speedMod)
+	{
+		float GrowSpeed = 6 * speedMod;
+		float ShrinkSpeed = 8 * speedMod;
+		const float MaxSize = 1.6f;
+
+		chargeParticle.transform.localScale = Vector3.zero;
+
+		while (chargeParticle.transform.localScale.x < MaxSize)
+		{
+			chargeParticle.transform.localScale += (Vector3.one * GrowSpeed * Time.deltaTime);
+			yield return null;
+		}
+
+		while (chargeParticle.transform.localScale.x > 0.1f)
+		{
+			chargeParticle.transform.localScale -= (Vector3.one * ShrinkSpeed * Time.deltaTime);
+			yield return null;
+		}
+
+		chargeParticle.transform.localScale = Vector3.zero;
+	}
+
 	float SweepDown()
 	{
-		const float maxDist = 40;
+		const float MaxDist = 300;
 		RaycastHit hitInfo;
 		rb.transform.position += Vector3.up * 0.2f;
 
-		bool rbHit = rb.SweepTest(Vector3.down, out hitInfo, maxDist, QueryTriggerInteraction.Ignore);
+		bool rbHit = rb.SweepTest(Vector3.down, out hitInfo, MaxDist, QueryTriggerInteraction.Ignore);
 		rb.transform.position -= Vector3.up * 0.2f;
 
 		if (rbHit)
 		{
 			return hitInfo.point.y;
 		}
-		else return float.MaxValue;
+		else return float.MinValue;
 	}
 
 	public override void DoHighJump(float pressHeight, float noPressHeight)

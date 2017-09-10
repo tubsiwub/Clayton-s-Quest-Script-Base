@@ -31,7 +31,7 @@ public class ScreenTransition : MonoBehaviour
 		GameObject obj = GameObject.Find("MainHUDCanvas");
 		if (obj != null) hudCanvas = obj.GetComponent<Canvas>();
 
-		if (scene.name == "SceneBase" && mode == LoadSceneMode.Single)
+		if (mode == LoadSceneMode.Single)
 			SetDirectly(1, "black_pattern");
 	}
 

@@ -7,6 +7,8 @@ using XInputDotNetPure;
 
 public class HumanController : PlayerController
 {
+	[SerializeField] GameObject footStepParticle;
+
 	private HumanCollider raycastCol;
 
 	protected float maxSpeed = 6.75f;       // should be a constant, but meh
@@ -48,6 +50,7 @@ public class HumanController : PlayerController
 	protected bool shareIsGrounded = false; // record at end of frame (after raycast) to get acurate info
 	public override bool IsGrounded() { return shareIsGrounded; }  // only use in external classes
 	public override bool IsFalling() { return lastVel.y <= 0; }
+	public CharacterController CharController { get { return charController; } }
 
 	enum JumpState { Complex, Simple }
 	JumpState jumpState = JumpState.Complex;
@@ -58,12 +61,12 @@ public class HumanController : PlayerController
 	public Platform_TrackDistance GetMovingPlatform { get { return raycastCol.GetMovingPlatform; ; } }
 	public void SetMovingPlatform(Platform_TrackDistance plat) { raycastCol.SetMovingPlatform(plat); }
 
+	public delegate void LandedEvent();
+	public static event LandedEvent OnHumanLanded;
+
 	new protected void Awake()
 	{
 		base.Awake();
-
-		QualitySettings.vSyncCount = 0;
-		Application.targetFrameRate = 60;
 
 		currJumpSpeed = jumpSpeed;
 		capsuleHeight = capsuleCollider.height;
@@ -98,6 +101,18 @@ public class HumanController : PlayerController
 		return origMovement;
 	}
 
+	PushyBallDeluxe pushyBall = null;
+	bool HasPushyBall { get { return pushyBall != null; } }
+	public void GetPushyBall(PushyBallDeluxe pushy) { pushyBall = pushy; }
+	void CancelPushyBall()
+	{
+		if (HasPushyBall)
+		{
+			pushyBall.EndPushy();
+			pushyBall = null;
+		}
+	}
+
 	protected virtual void Update()
 	{
 		if (!PlayerHandler.CanUpdate)
@@ -108,7 +123,13 @@ public class HumanController : PlayerController
 		Vector3 moveDir = GetMovement(input, Quaternion.identity);
 		float moveSpeed = moveDir.magnitude;
 
-		if (!isFrozen) RotateMesh(moveDir.normalized);
+		if (!isFrozen)
+		{
+			if (!HasPushyBall)
+				RotateMesh(moveDir.normalized);
+			else
+				RotateMeshSlow(moveDir.normalized);
+		}
 
 		if (moveSpeed > 0.19f)      // greater than deadzone
 			SpeedUp(ref moveSpeed);
@@ -125,15 +146,21 @@ public class HumanController : PlayerController
 		if (jumpState == JumpState.Simple)
 			HandleJumpInputSimple(0, false);
 
-		bool hitCeiling = raycastCol.HitCeilingThisFrame();
-		if (!isGrounded && vel.y > ceilingHitVel && hitCeiling)
-			vel.y = ceilingHitVel;
+		if (playerHandler.CurrentSecondaryAction != PlayerHandler.SecondaryAction.OnLedge)
+		{
+			bool hitCeiling = raycastCol.HitCeilingThisFrame();
+			if (!isGrounded && vel.y > ceilingHitVel && hitCeiling)
+				vel.y = ceilingHitVel;
 
-		vel = ColliderIgnoreDirection(vel);
+			vel = ColliderIgnoreDirection(vel);
+		}
 
 		if (!isFrozen) Move(ref vel);
 
 		HandleFalling(vel);
+
+		if (IsFalling())
+			raycastCol.CancelNoInput();
 
 		isGrounded = false;
 		lastVel = vel;
@@ -175,6 +202,25 @@ public class HumanController : PlayerController
 		{
 			Vector3 targetRotation = Vector3.Lerp(rotateMesh.forward, moveDir,
 				Time.deltaTime * (isGrounded ? rotSmooth : rotSmoothSlow));
+			if (targetRotation != Vector3.zero)
+				rotateMesh.rotation = Quaternion.LookRotation(targetRotation);
+		}
+	}
+
+	void RotateMeshSlow(Vector3 moveDir)
+	{
+		float angle = Vector3.Angle(moveDir, rotateMesh.forward);
+
+		if (angle > 135)
+		{
+			CancelPushyBall();
+			RotateMesh(moveDir);
+			return;
+		}
+		else
+		{
+			Vector3 targetRotation = Vector3.Slerp(rotateMesh.forward, moveDir,
+				Time.deltaTime * (rotSmoothSlow * 0.5f));
 			if (targetRotation != Vector3.zero)
 				rotateMesh.rotation = Quaternion.LookRotation(targetRotation);
 		}
@@ -229,22 +275,29 @@ public class HumanController : PlayerController
 	protected virtual Vector3 CalcVelocity(float moveSpeed)
 	{
 		Vector3 vel = rotateMesh.forward * moveSpeed;
+
+		if (float.IsNaN(lastVel.y))		// sometimes gets borked after pausing... not *entirely* sure why, but... meh
+			lastVel.y = 0;
+
 		vel.y = lastVel.y + jumpyVel;
 
 		return vel;
 	}
 
-	public void ForceJump(bool doAnimation)
+	public void ForceJump(bool doAnimation, bool playSound)
 	{
 		lastVel.y = 0;
 		jumpyVel = 0;
 
 		currJumpSpeed = jumpSpeed;
-		JUMP(maxSpeed, doAnimation, ref lastVel);
+		JUMP(maxSpeed, doAnimation, playSound, ref lastVel);
 	}
 
 	public override void DoHighJump(float pressHeight, float noPressHeight)
 	{
+		int r = UnityEngine.Random.Range(1, 4);     //5);
+		SoundManager.instance.PlayClip("JumpGrunt0" + r);
+
 		if (playerHandler.JustSlammed)
 		{
 			pressHeight = pressHeight * 1.2f;
@@ -268,10 +321,10 @@ public class HumanController : PlayerController
 
 	private void HandleJumpInputSimple(float height, bool goUp)
 	{
-		if (goUp)
+		if (goUp && !IsJumpFrozen)
 		{
 			if (height > 5)     // must be hight enough to play animation and whatnot
-				HandleJumpEffects(true);
+				HandleJumpEffects(true, false);
 
 			jumpyVel = height;
 		}
@@ -286,7 +339,7 @@ public class HumanController : PlayerController
 	{
 		if (jumpHeld && (isGrounded || edgeJumpFrames > 0) && enableReJump)
 		{
-			JUMP(speed, doAnimation, ref vel);
+			JUMP(speed, doAnimation, true, ref vel);
 			return;
 		}
 		
@@ -308,22 +361,28 @@ public class HumanController : PlayerController
 			enableReJump = true;
 	}
 
-	private void JUMP(float speed, bool doAnimation, ref Vector3 vel)
+	private void JUMP(float speed, bool doAnimation, bool playSound, ref Vector3 vel)
 	{
+		if (IsJumpFrozen) return;
+
 		vel.y = 0;
 
-		HandleJumpEffects(doAnimation);
+		HandleJumpEffects(doAnimation, playSound);
 		speedJumpedAt = speed;
 		enableReJump = false;
 		edgeJumpFrames = 0;
+		CancelPushyBall();
 
 		SetJumpyVel();
 	}
 
-	private void HandleJumpEffects(bool doAnimation)
+	private void HandleJumpEffects(bool doAnimation, bool playSound)
 	{
-		int r = UnityEngine.Random.Range(1, 5);
-		SoundManager.instance.PlayClip("JumpGrunt0" + r);
+		if (playSound)
+		{
+			int r = UnityEngine.Random.Range(1, 4);     //5);
+			SoundManager.instance.PlayClip("JumpGrunt0" + r);
+		}
 
 		if (doAnimation) humanAnimator.SetTrigger("Jump");
 	}
@@ -343,6 +402,9 @@ public class HumanController : PlayerController
 	{
 		vel.y -= gravity * Time.deltaTime;
 		vel.y = Mathf.Clamp(vel.y, -maxFallSpeed, float.MaxValue);
+
+		if (horizontalFrozen)
+			vel = new Vector3(0, vel.y, 0);
 
 		Vector3 movePlatDist = Vector3.zero;
 		if (raycastCol.OnMovingPlatform)
@@ -368,7 +430,7 @@ public class HumanController : PlayerController
 
 	protected void HandleFalling(Vector3 vel)
 	{
-		if (playerHandler.CurrentSecondaryAction != PlayerHandler.SecondaryAction.None)
+		if (playerHandler.CurrentSecondaryAction == PlayerHandler.SecondaryAction.Disable)
 			return;
 
 		if (vel.y <= -maxFallSpeed && !setFallingFace)
@@ -407,6 +469,8 @@ public class HumanController : PlayerController
 		}
 
 		settingFloored = false;
+
+		KillVelocity();
 		SetFrozen(true, false);
 	}
 
@@ -422,6 +486,9 @@ public class HumanController : PlayerController
 
 			if (PlayerHandler.AllowVibration)
 				StartCoroutine(Rumble(0.075f, 0.4f, 0.4f));
+
+			if (OnHumanLanded != null)
+				OnHumanLanded();
 		}
 	}
 
@@ -460,8 +527,30 @@ public class HumanController : PlayerController
 			edgeJumpFrames = maxEdgeJumpFrames;
 		}
 
+		if (isGrounded && lastSpeed > 0.1f && !isFrozen)
+			SpawnFootstepParticle();
+
 		shareIsGrounded = isGrounded;   // record at end of frame (after raycast) to get acurate info
 		humanAnimator.SetBool("IsGrounded", IsGrounded());
+	}
+
+	void SpawnFootstepParticle()
+	{
+		const int SoundAmount = 18;
+		const int Low = 8;
+		const int High = 12;
+
+		if (Time.frameCount % SoundAmount == 0)
+		{
+			int r = UnityEngine.Random.Range(1, 6);
+			SoundManager.instance.PlayClip("Footstep0" + r, 0.4f);
+		}
+
+		if (Time.frameCount % UnityEngine.Random.Range(Low, High) == 0)
+		{
+			GameObject particle = Instantiate(footStepParticle, transform.position + (Vector3.down * 0.85f), Quaternion.identity);
+			Destroy(particle, 1);
+		}
 	}
 
 	IEnumerator Rumble(float time, float leftMotor, float rightMotor)
@@ -540,12 +629,20 @@ public class HumanController : PlayerController
 
 		if (nextState != PlayerHandler.PlayerState.Slider)
 			GetComponentInChildren<PlayerHolder>().Drop();
+		else	// slider
+		{
+			if (setFallingFace)
+				SetLanded();
+		}
 
 		impulse = Vector3.zero;
 		raycastCol.DisableMovingPlatform();
 		raycastCol.DisableTwirlingPlatform();
 		raycastCol.CancelNoInput();
 		charController.enabled = false;
+		setFallingFace = false;
+		CancelPushyBall();
+
 		enabled = false;
 	}
 
@@ -563,6 +660,31 @@ public class HumanController : PlayerController
 
 		if (!IsFrozen && !humanAnimator.enabled)
 			humanAnimator.enabled = true;
+	}
+
+	public override void SetFreezeJump(bool frozen)
+	{
+		if (frozen)
+		{
+			base.SetFreezeJump(frozen);
+			CancelJump();
+		}
+		else
+			StartCoroutine(WaitBeforeUnfreezingJump());
+	}
+
+	IEnumerator WaitBeforeUnfreezingJump()
+	{
+		yield return new WaitForSeconds(0.75f);
+		base.SetFreezeJump(false);
+	}
+
+	public override void SetHorizontalFrozen(bool frozen)
+	{
+		horizontalFrozen = frozen;
+
+		if (horizontalFrozen)
+			KillHorizontalVelocity();
 	}
 
 	public override void KillVelocity()

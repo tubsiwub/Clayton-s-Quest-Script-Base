@@ -23,7 +23,7 @@ public class HealthManager : MonoBehaviour
 	enum HealthState { Normal, Invincible, Paused };
 	HealthState healthState;
 
-	public enum AnimType { Default, Drown, Splat, BallToHuman, None }
+	public enum AnimType { Default, Drown, Splat, BallToHuman, PuzzleFail, None }
 
 	public bool IsInvincible { get { return healthState == HealthState.Invincible; } }
 	// health state is paused while the death animation is playing
@@ -47,9 +47,8 @@ public class HealthManager : MonoBehaviour
 			Destroy(gameObject);
 
 		DontDestroyOnLoad(gameObject);
-		SceneManager.sceneLoaded += (scene, loadingMode) => { SceneLoaded(); };
+		SceneManager.sceneLoaded += SceneLoaded;
 
-		SavingLoading.instance.LoadLives();
 		ScreenTransition.OnDoneForward += ScreenTransitionDone;
 	}
 
@@ -59,15 +58,15 @@ public class HealthManager : MonoBehaviour
 			LoseALife();
 	}
 
-	void SceneLoaded()
+	void SceneLoaded(Scene scene, LoadSceneMode mode)
 	{
+		if (scene.buildIndex != 0)
+			SavingLoading.instance.LoadLives();
+
 		FindRefs();
 
 		if (healthPie)
-		{
-			for (int i = 4; i >= lives; i--)
-				healthPie.LoseABar(i);
-		}
+			healthPie.LoseBars(totalLives - lives);
 
 		hudFaceGuy.SetFace(lives);
 	}
@@ -96,29 +95,24 @@ public class HealthManager : MonoBehaviour
 	{
 		if (!CanGetHurt) return;
 
-		// remove lives one by one based on amount, sending value to healthPie each time
-		// we have to do it this way because healthPie is bad, and I don't wanna fix it
-		for (int i = 0; i < amount; i++)
-		{
-			lives--;
+		lives -= amount;
+		if (lives < 0) lives = 0;
 
-			if (lives <= 0)
-				lives = 0;	// set to 0 so we can still send this to health pie
-
-			if (healthPie) healthPie.LoseABar(lives);
-		}
+		if (healthPie)
+			healthPie.LoseBars(totalLives - lives);
 
 		healthState = HealthState.Invincible;
 
 		if (lives > 0)
 		{
 			playerHealthBlink.StartBlinking(lives >= 1);
-			SoundManager.instance.PlayClip("GettingHurt0" + Random.Range(1, 10));
+			SoundManager.instance.PlayClip("GettingHurt0" + Random.Range(1, 3));
 		}
 		else StartCoroutine(PauseThenRespawn(AnimType.Default));
 
 		hudFaceGuy.SetFace(lives);
 		SavingLoading.instance.SaveLives(lives);
+		SavingLoading.instance.SaveData();
 	}
 
 	public void LoseALife()
@@ -167,6 +161,7 @@ public class HealthManager : MonoBehaviour
 		if (healthPie) healthPie.LoseAllBars();
 		hudFaceGuy.SetFace(lives);
 		SavingLoading.instance.SaveLives(lives);
+		SavingLoading.instance.SaveData();
 	}
 
 	public void RegainLives(int amount)
@@ -177,6 +172,7 @@ public class HealthManager : MonoBehaviour
 		if (healthPie) healthPie.RegainBars(lives-1);
 		hudFaceGuy.SetFace(lives);
 		SavingLoading.instance.SaveLives(lives);
+		SavingLoading.instance.SaveData();
 	}
 
 	public void SetLives(int lives)
@@ -222,6 +218,7 @@ public class HealthManager : MonoBehaviour
 		if (healthPie) healthPie.ResetBars();
 		hudFaceGuy.SetFace(lives);
 		SavingLoading.instance.SaveLives(lives);
+		SavingLoading.instance.SaveData();
 
 		playerHandler.SetDeathAnimation(AnimType.None);
 		playerHandler.Respawn();
@@ -229,8 +226,9 @@ public class HealthManager : MonoBehaviour
 		healthState = HealthState.Invincible;
 		playerHealthBlink.StartBlinking(false);
 
-		Camera.main.GetComponent<CameraControlDeluxe>().SetToPlayer();
-		Camera.main.GetComponent<ScreenTransition>().WaitThenBackward(0.25f, 2, "topbottom_pattern");
+		GameObject cam = Camera.main.gameObject;
+		cam.GetComponent<CameraControlDeluxe>().SetToPlayer();
+		cam.GetComponent<ScreenTransition>().WaitThenBackward(0.25f, 2, "topbottom_pattern");
 		waitingForScreenTrans = false;
 	}
 }

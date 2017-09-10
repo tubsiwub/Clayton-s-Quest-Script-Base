@@ -7,6 +7,7 @@ public class Pickupable : MonoBehaviour
 {
 	[SerializeField] Vector3 holdOffset;
 	[SerializeField] float throwForceMultiplier = 1;
+	[SerializeField] GameObject destroyObject;
 
 	const float range = 1.85f;
 	const float flySpeed = 10;
@@ -37,6 +38,11 @@ public class Pickupable : MonoBehaviour
 
 	void Awake(){
 
+		// Event Triggers
+		if (GetComponent<SavingLoading_StorageKeyCheck> ()) {
+			GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck += KeyCheck;
+		}
+
 		if(GetComponent<ObjInfo> ())
 			info = GetComponent<ObjInfo> ();
 
@@ -44,7 +50,11 @@ public class Pickupable : MonoBehaviour
 
 	void Start()
 	{
-		Collider[] cols = GetComponents<Collider>();
+		Collider[] cols;
+		if (GetComponent<Collider> ())
+			cols = GetComponents<Collider> ();
+		else
+			cols = GetComponentsInChildren<Collider> ();
 		for (int i = 0; i < cols.Length; i++)
 		{
 			if (!cols[i].isTrigger)
@@ -55,7 +65,12 @@ public class Pickupable : MonoBehaviour
 		}
 
 		rb = GetComponent<Rigidbody>();
-		rend = GetComponent<Renderer>();
+
+		if (GetComponent<Renderer> ())
+			rend = GetComponent<Renderer> ();
+		else
+			rend = GetComponentInChildren<Renderer> ();
+		
 		startCol = rend.material.color;
 
 		startPos = transform.position;
@@ -64,6 +79,21 @@ public class Pickupable : MonoBehaviour
 		SceneLoaded ();
 
 		StartCoroutine(FindPlayerHolder());
+
+		Ray ray = new Ray (transform.position + Vector3.up, -Vector3.up);
+		RaycastHit rayHit;
+		if (Physics.Raycast (ray, out rayHit))
+		{
+			transform.position = rayHit.point;
+			transform.rotation = Quaternion.Euler (Vector3.zero);
+		}
+	}
+		
+	// If storageKey marks this as completed, perform these actions
+	void KeyCheck(){
+
+		Destroy (this.gameObject);
+
 	}
 
 	void SceneLoaded(){
@@ -78,6 +108,11 @@ public class Pickupable : MonoBehaviour
 		if(info)
 			info.SAVE (overwrite, exists);
 		SavingLoading.instance.SaveData();
+	}
+
+	public void ResetStartValues(){
+		startPos = transform.position;
+		startRot = transform.rotation;
 	}
 
 	public void Respawn()
@@ -186,6 +221,9 @@ public class Pickupable : MonoBehaviour
 			warning += "which probably isn't right. Don't forget to set the holdOffset!";
 			Debug.LogWarning(warning);
 		}
+
+		if (destroyObject != null)
+			Destroy(destroyObject);
 
 		playerHolder.SetHolding(this);
 		StopGlow();

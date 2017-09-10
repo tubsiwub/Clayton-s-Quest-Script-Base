@@ -41,9 +41,15 @@ public class Ball_Reset : MonoBehaviour {
 
 	}
 
+	public void SetResetParameters(Vector3 pos, Vector3 rot, Vector3 scale)
+	{
+		startingPosition = pos;
+		startingRotation = Quaternion.Euler(rot);
+		startingScale = scale;
+	}
+
 	IEnumerator ResetButton(){
 
-		print ("4");
 		yield return new WaitForSeconds (0.4f);
 
 		if(puzzleButton)

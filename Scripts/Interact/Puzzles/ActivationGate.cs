@@ -35,59 +35,9 @@ public class ActivationGate : MonoBehaviour {
 
 		timerObj = GameObject.Find ("TimerUI");
 
-		if(!timerToggle){
+		EventListeners (true);
 
-			// Events
-			if(buttonObj){
-				if(!openAfterWin){
-					buttonObj.GetComponent<PuzzleButton>().OnButtonActivated += GateMove;			// Move gate to open if button check succeeds
-					buttonObj.GetComponent<PuzzleButton>().OnButtonReset += GateReset;				// Be mean and close the gate if the player sucks at counting
-				}
-			}
-
-			if(questObj){
-				if (!openAfterWin) {
-					questObj.GetComponent<NPC_QuestType> ().OnQuestComplete += GateMove;		
-					questObj.GetComponent<NPC_QuestType> ().OnQuestFailed += GateReset;	
-				}
-			}
-
-			if(questNPC){
-				if (!openAfterWin) {
-					questNPC.GetComponent<NPC_QuestContainer> ().OnQuestStarted += GateMove;		
-					questNPC.GetComponent<NPC_QuestContainer> ().OnQuestFailed += GateReset;	
-				}
-			}
-
-		}
-
-		if (timerToggle) {
-
-			// Events
-			if (winZone) {
-				winZone.GetComponent<WinZone> ().OnWinZoneActivate += Complete;
-				if(openAfterWin)
-					winZone.GetComponent<WinZone> ().OnWinZoneActivate += GateMove;
-			}
-			
-			if (timerObj) {
-				if (!openAfterWin) {
-					timerObj.GetComponent<ActivatedTimer> ().OnTimerStart += GateMove;
-					timerObj.GetComponent<ActivatedTimer> ().OnTimerRunOut += GateReset;
-				}
-			}
-
-		}
-
-		if (triggerObj) {
-			if (!openAfterWin) {
-				if(triggerObj.GetComponent<Cutscene_TriggerScript> ())
-					triggerObj.GetComponent<Cutscene_TriggerScript> ().OnTriggered += GateMove;
-				if (triggerObj.GetComponent<EnemyDefeatCounter_Trigger> ()) {
-					triggerObj.GetComponent<EnemyDefeatCounter_Trigger> ().OnTriggered += GateMove;
-				}
-			}
-		}
+		SceneLoader.OnSceneLoaderLoad += ResetListeners;
 
 		closedLocation = transform.localPosition;
 
@@ -95,21 +45,152 @@ public class ActivationGate : MonoBehaviour {
 		transform.localPosition = closedLocation;
 
 		if (GetComponent<SavingLoading_StorageKeyCheck> ()) {
+			
 			storageKey = GetComponent<SavingLoading_StorageKeyCheck> ().storageKey;
 
 			// If this object relies on a quest, use that instead
 			if (questObject) {
 
-				if (SavingLoading.instance.LoadQuestStatus_Container(storageKey) == QUEST_STATUS.FINISHED) {
+				if (SavingLoading.instance.LoadQuestStatus_Container(storageKey) == QUEST_STATUS.FINISHED ||
+					SavingLoading.instance.LoadQuestStatus_Container(storageKey) == QUEST_STATUS.COMPLETE) 
+				{
 					GateMove ();
 				}
 
 			} else {
 				
-				if (SavingLoading.instance.CheckStorageKeyStatus (storageKey)) {
+				if (SavingLoading.instance.CheckStorageKeyStatus (storageKey)) 
+				{
 					GateMove ();
 				}
 			}
+		}
+	}
+
+	void ResetListeners(){
+
+		EventListeners (false);
+
+	}
+
+	// true to add, false to remove
+	void EventListeners(bool toggle){
+
+		if (toggle) {
+
+			if (!timerToggle) {
+
+				// Events
+				if (buttonObj) {
+					if (!openAfterWin) {
+						buttonObj.GetComponent<PuzzleButton> ().OnButtonActivated += GateMove;			// Move gate to open if button check succeeds
+						buttonObj.GetComponent<PuzzleButton> ().OnButtonReset += GateReset;				// Be mean and close the gate if the player sucks at counting
+					}
+				}
+
+				if (questObj) {
+					if (!openAfterWin) {
+						questObj.GetComponent<NPC_QuestType> ().OnQuestComplete += GateMove;		
+						questObj.GetComponent<NPC_QuestType> ().OnQuestFailed += GateReset;	
+					}
+				}
+
+				if (questNPC) {
+					if (!openAfterWin) {
+						questNPC.GetComponent<NPC_QuestContainer> ().OnQuestStarted += GateMove;		
+						questNPC.GetComponent<NPC_QuestContainer> ().OnQuestFailed += GateReset;	
+					}
+				}
+
+			}
+
+			if (timerToggle) {
+
+				// Events
+				if (winZone) {
+					winZone.GetComponent<WinZone> ().OnWinZoneActivate += Complete;
+					if (openAfterWin)
+						winZone.GetComponent<WinZone> ().OnWinZoneActivate += GateMove;
+				}
+
+				if (timerObj) {
+					if (!openAfterWin) {
+						timerObj.GetComponent<ActivatedTimer> ().OnTimerStart += GateMove;
+						timerObj.GetComponent<ActivatedTimer> ().OnTimerRunOut += GateReset;
+					}
+				}
+
+			}
+
+			if (triggerObj) {
+				if (!openAfterWin) {
+					if (triggerObj.GetComponent<Cutscene_TriggerScript> ())
+						triggerObj.GetComponent<Cutscene_TriggerScript> ().OnTriggered += GateMove;
+					if (triggerObj.GetComponent<EnemyDefeatCounter_Trigger> ()) {
+						triggerObj.GetComponent<EnemyDefeatCounter_Trigger> ().OnTriggered += GateMove;
+					}
+				}
+				if(timerObj)
+					timerObj.GetComponent<ActivatedTimer> ().OnTimerRunOut += GateReset;
+			}
+		} else {
+
+			if(!timerToggle){
+
+				// Events
+				if(buttonObj){
+					if(!openAfterWin){
+						buttonObj.GetComponent<PuzzleButton>().OnButtonActivated -= GateMove;			// Move gate to open if button check succeeds
+						buttonObj.GetComponent<PuzzleButton>().OnButtonReset -= GateReset;				// Be mean and close the gate if the player sucks at counting
+					}
+				}
+
+				if(questObj){
+					if (!openAfterWin) {
+						questObj.GetComponent<NPC_QuestType> ().OnQuestComplete -= GateMove;		
+						questObj.GetComponent<NPC_QuestType> ().OnQuestFailed -= GateReset;	
+					}
+				}
+
+				if(questNPC){
+					if (!openAfterWin) {
+						questNPC.GetComponent<NPC_QuestContainer> ().OnQuestStarted -= GateMove;		
+						questNPC.GetComponent<NPC_QuestContainer> ().OnQuestFailed -= GateReset;	
+					}
+				}
+
+			}
+
+			if (timerToggle) {
+
+				// Events
+				if (winZone) {
+					winZone.GetComponent<WinZone> ().OnWinZoneActivate -= Complete;
+					if(openAfterWin)
+						winZone.GetComponent<WinZone> ().OnWinZoneActivate -= GateMove;
+				}
+
+				if (timerObj) {
+					if (!openAfterWin) {
+						timerObj.GetComponent<ActivatedTimer> ().OnTimerStart -= GateMove;
+						timerObj.GetComponent<ActivatedTimer> ().OnTimerRunOut -= GateReset;
+					}
+				}
+
+			}
+
+			if (triggerObj) {
+				if (!openAfterWin) {
+					if(triggerObj.GetComponent<Cutscene_TriggerScript> ())
+						triggerObj.GetComponent<Cutscene_TriggerScript> ().OnTriggered -= GateMove;
+					if (triggerObj.GetComponent<EnemyDefeatCounter_Trigger> ()) {
+						triggerObj.GetComponent<EnemyDefeatCounter_Trigger> ().OnTriggered -= GateMove;
+					}
+				}
+				if(timerObj)
+					timerObj.GetComponent<ActivatedTimer> ().OnTimerRunOut -= GateReset;
+			}
+
 		}
 
 	}
@@ -124,32 +205,40 @@ public class ActivationGate : MonoBehaviour {
 		
 		winState = true;
 
-		StopAllCoroutines ();
+		if (isClosing)
+			StopCoroutine ("ShiftGateClosed");
 
-		StartCoroutine (ShiftGateOpen ());
+		EventListeners (false);
+
+		StartCoroutine ("ShiftGateOpen");
 
 	}
 
 	void GateReset() {
-		
-		StopAllCoroutines ();
+
+		if (isOpening)
+			StopCoroutine ("ShiftGateOpen");
 
 		if(!winState)
-			StartCoroutine (ShiftGateClosed ());
-		
+			StartCoroutine ("ShiftGateClosed");
+
 	}
 
-	void GateMove(){
+	void GateMove() {
 
-		StopAllCoroutines ();
+		if (isClosing)
+			StopCoroutine ("ShiftGateClosed");
 
-		StartCoroutine (ShiftGateOpen ());
+		StartCoroutine ("ShiftGateOpen");
 
 	}
 	#endregion
 
 	#region Coroutine Enums
+	bool isOpening = false;
 	IEnumerator ShiftGateOpen(){
+		
+		isOpening = true;
 
 		while (Vector3.Distance(transform.localPosition, openLocation) > 0.001f) {
 
@@ -159,9 +248,14 @@ public class ActivationGate : MonoBehaviour {
 
 		}
 
+		isOpening = false;
+
 	}
 
+	bool isClosing = false;
 	IEnumerator ShiftGateClosed(){
+
+		isClosing = true;
 
 		while (Vector3.Distance(transform.localPosition, closedLocation) > 0.001f) {
 
@@ -170,6 +264,8 @@ public class ActivationGate : MonoBehaviour {
 			yield return new WaitForEndOfFrame ();
 
 		}
+
+		isClosing = false;
 
 	}
 	#endregion

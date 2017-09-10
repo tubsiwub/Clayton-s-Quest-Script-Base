@@ -6,8 +6,15 @@ using UnityEngine.SceneManagement;
 [RequireComponent(typeof(BoxCollider))]
 public class SceneLoader : MonoBehaviour
 {
+	public delegate void SceneLoader_Loaded();
+	public static event SceneLoader_Loaded OnSceneLoaderLoad;	// fire when triger enter
+
 	[SerializeField] string[] scenePaths = new string[1];
 	[SerializeField] bool showLoadScreen = false;
+	[SerializeField] LoaderID loaderId = 0;
+
+	public enum LoaderID { None, Tutorial, Pickup, Mountain };
+	public LoaderID GetID { get { return loaderId; } }
 
 	private string[] sceneNames;
 
@@ -18,6 +25,7 @@ public class SceneLoader : MonoBehaviour
 	GameObject loadingCanvas;
 	GameObject loadCanvRef = null;
 	bool reEnableTrigger = true;
+	bool respawnOnFinishLoad = false;
 
 	const float LOADSCREEN_TIMEOUT = 30;
 	int finishedLoadCount = 0;
@@ -38,6 +46,9 @@ public class SceneLoader : MonoBehaviour
 		sceneNames = new string[scenePaths.Length];
 		for (int i = 0; i < sceneNames.Length; i++)
 			sceneNames[i] = PathToName(scenePaths[i]);
+
+		if (loaderId != LoaderID.None)
+			LevelManager.instance.AddSceneLoader(this);
 	}
 
 	void SceneLoaded(Scene scene, LoadSceneMode mode)
@@ -47,7 +58,10 @@ public class SceneLoader : MonoBehaviour
 			finishedLoadCount--;
 
 			if (finishedLoadCount == 0)
+			{
+				playerHandler = GameObject.FindWithTag("Player").GetComponent<PlayerHandler>();
 				EndLoadScreen();
+			}
 		}
 	}
 
@@ -91,8 +105,16 @@ public class SceneLoader : MonoBehaviour
 	void OnTriggerEnter(Collider obj)
 	{
 		if (obj.gameObject.tag != "Player") return;
-		if (!reEnableTrigger) return;   // make sure trigger doesn't happen a bunch
 
+		if (!reEnableTrigger) return;   // make sure trigger doesn't happen a bunch
+		
+		BeginSceneLoad(false);
+
+		reEnableTrigger = false;
+	}
+
+	public void BeginSceneLoad(bool respawnOnFinishLoad)
+	{
 		for (int i = 0; i < sceneNames.Length; i++)
 		{
 			if (!SceneManager.GetSceneByName(sceneNames[i]).isLoaded)
@@ -100,10 +122,19 @@ public class SceneLoader : MonoBehaviour
 		}
 
 		bool loadedAnything = LevelManager.instance.Load(sceneNames);
+
+		if (loadedAnything)
+		{
+			if (OnSceneLoaderLoad != null)
+				OnSceneLoaderLoad();
+		}
+
 		LevelManager.instance.UnloadOthers(sceneNames);
 
 		if (loadedAnything)
 		{
+			this.respawnOnFinishLoad = respawnOnFinishLoad;
+
 			if (showLoadScreen)
 			{
 				loadCanvRef = Instantiate(loadingCanvas);
@@ -112,11 +143,7 @@ public class SceneLoader : MonoBehaviour
 				playerHandler.SetFrozen(true, true);
 				cam.SetFreeze(true);
 			}
-
-			obj.gameObject.GetComponent<PlayerHandler>().SetCheckpoint(transform.position + (Vector3.up * 5));
 		}
-
-		reEnableTrigger = false;
 	}
 
 	void OnTriggerExit(Collider obj)
@@ -134,6 +161,19 @@ public class SceneLoader : MonoBehaviour
 
 		playerHandler.SetFrozen(false, false);
 		cam.SetFreeze(false);
+
+		StartCoroutine(WaitForCheckpointToClearThenSet());
+	}
+
+	IEnumerator WaitForCheckpointToClearThenSet()
+	{
+		yield return null;
+		playerHandler.SetCheckpoint(transform.position + (Vector3.up * 5), Quaternion.LookRotation(Vector3.forward));
+
+		if (respawnOnFinishLoad)
+			playerHandler.Respawn();
+
+		respawnOnFinishLoad = false;
 	}
 
 	IEnumerator LoadScreenTimeOut()

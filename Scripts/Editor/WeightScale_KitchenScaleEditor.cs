@@ -165,7 +165,8 @@ public class WeightScale_KitchenScaleEditor : Editor {
 		GUILayout.Space(8.0f);
 		for (int i = 0; i < mainScript.weightObjects.Count; i++) {
 
-			EditorGUILayout.LabelField("Object " + i + ": " + mainScript.weightObjects[i].name);
+			if(mainScript.weightObjects[i] != null)
+				EditorGUILayout.LabelField("Object " + i + ": " + mainScript.weightObjects[i].name);
 			GUILayout.Space(4.0f);
 
 		}

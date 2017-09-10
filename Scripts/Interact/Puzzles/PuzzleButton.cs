@@ -68,6 +68,7 @@ public class PuzzleButton : MonoBehaviour {
 	Vector3 startingPosition;
 	Quaternion startingRotation;
 	Vector3 startingScale;
+	public WinZone ballWinZone;
 
 	#endregion
 
@@ -85,28 +86,42 @@ public class PuzzleButton : MonoBehaviour {
 
 	PlayerHolder playerHolder;
 
+	SceneLoadTrigger sceneLoadTrigger;
+
 
 
 	void Start () {
 
 		playerObj = GameObject.FindWithTag ("Player");
-
 		playerHolder = GameObject.FindWithTag ("Player").GetComponentInChildren<PlayerHolder> ();
-
 		resetTimer = GameObject.Find ("TimerUI").GetComponent<ActivatedTimer>();
 
-		if (buttonType == ButtonType.PUSHYBALL) {
+		// Event Triggers
+		if (GetComponent<SavingLoading_StorageKeyCheck> ()) {
+			GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck += KeyCheck;
+		}
 
+		// if we're in a puzzle scene
+		if (!LevelManager.instance.SceneBaseLoaded)
+		{
+			sceneLoadTrigger = GameObject.Find ("SceneLoadTrigger").GetComponent<SceneLoadTrigger> ();
+			sceneLoadTrigger.OnBallDoorTrigger += BallDoorLoad;
+		}
+
+		if (buttonType == ButtonType.PUSHYBALL) 
+		{
 			startingPosition = keyObj.transform.position;
 			startingRotation = keyObj.transform.rotation;
 			startingScale = keyObj.transform.localScale;
 
+			ballWinZone.OnWinZoneActivate += DisableButton;
 		}
 
 		if (buttonType == ButtonType.SLAM) {
 
 			if (resetTimer) {
 
+				SceneLoader.OnSceneLoaderLoad += ResetQuest;
 				resetTimer.GetComponent<ActivatedTimer> ().OnTimerRunOut += ButtonReset;
 
 				if (transform.parent.transform.parent) {
@@ -149,6 +164,46 @@ public class PuzzleButton : MonoBehaviour {
 
 	}
 
+	void BallDoorLoad(){
+		
+		sceneLoadTrigger.OnBallDoorTrigger -= BallDoorLoad;
+
+		// Remove keycheck
+		if (GetComponent<SavingLoading_StorageKeyCheck> ()) {
+			GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
+		}
+
+		// Remove events
+		if (GetComponent<SavingLoading_StorageKeyCheck> ()) 
+		{
+			GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
+		}
+
+		if (buttonType == ButtonType.SLAM) 
+		{
+			if (resetTimer) 
+			{
+				SceneLoader.OnSceneLoaderLoad -= ResetQuest;
+				resetTimer.GetComponent<ActivatedTimer> ().OnTimerRunOut -= ButtonReset;
+
+				if (transform.parent.transform.parent) 
+				{
+					if (GameObject.Find (transform.parent.transform.parent.name + "/WinZone")) 
+					{
+						if(winZone) winZone.OnWinZoneActivate -= Complete;
+					} 
+				}
+				else if(transform.parent)
+				{
+					if (GameObject.Find (transform.parent.name + "/WinZone")) 
+					{
+						if (winZone) winZone.OnWinZoneActivate -= Complete;
+					} 
+				}
+			}
+		}
+	}
+
 	void Update () {
 
 		if (buttonType == ButtonType.WEIGHT) {
@@ -186,214 +241,227 @@ public class PuzzleButton : MonoBehaviour {
 
 	}
 
+	void ResetQuest(){
+		
+		SceneLoader.OnSceneLoaderLoad -= ResetQuest;
+
+		if(resetTimer)
+		if(resetTimer.GetComponent<ActivatedTimer> ())
+		resetTimer.GetComponent<ActivatedTimer> ().OnTimerRunOut -= ButtonReset;
+
+	}
+
 	void OnTriggerEnter(Collider col){
 
-		if (buttonType == ButtonType.NORMAL) {
+		// If the puzzle isn't won yet
+		if (!winState) {
+			if (buttonType == ButtonType.NORMAL) {
 			
-			if (col.transform.tag == "Player" && !buttonActivated) {
+				if (col.transform.tag == "Player" && !buttonActivated) {
 
-				Debug.Log ("Normal ON");
+					Debug.Log ("Normal ON");
 
-				buttonActivated = true;
+					buttonActivated = true;
 
-				if (OnButtonActivated != null)
-					OnButtonActivated ();
+					if (OnButtonActivated != null)
+						OnButtonActivated ();
 
-			}
-
-		}
-
-		if (buttonType == ButtonType.WEIGHT) {
-
-			if (!weightObjects.Contains (col.gameObject) && col.transform.GetComponent<WeightObject>()) {
-
-				weightObjects.Add (col.gameObject);
-
-				currentWeightAchieved += col.transform.GetComponent<WeightObject> ().weightValue;
-
-				Debug.Log ("Added: " + col.gameObject.name);
+				}
 
 			}
 
-		}
+			if (buttonType == ButtonType.WEIGHT) {
 
-		if (buttonType == ButtonType.KEY) {
+				if (!weightObjects.Contains (col.gameObject) && col.transform.GetComponent<WeightObject> ()) {
 
-			if (col.GetComponent<PushyBall> ()) {
-				col.GetComponent<PushyBall> ().RemoveAllReferences ();
+					weightObjects.Add (col.gameObject);
+
+					currentWeightAchieved += col.transform.GetComponent<WeightObject> ().weightValue;
+
+					Debug.Log ("Added: " + col.gameObject.name);
+
+				}
+
 			}
 
-			if (!buttonActivated){
+			if (buttonType == ButtonType.KEY) {
 
-				// If you're using a specific object, check for it first.
-				if (useSpecificObject) {
+				if (col.GetComponent<PushyBall> ()) {
+					col.GetComponent<PushyBall> ().RemoveAllReferences ();
+				}
 
-					if (col == keyObj) {	// Note: was checking "if name" before
+				if (!buttonActivated) {
 
-						if(playerHolder.IsHolding)
+					// If you're using a specific object, check for it first.
+					if (useSpecificObject) {
+
+						if (col == keyObj) {	// Note: was checking "if name" before
+
+							if (playerHolder.IsHolding)
+							if (playerHolder.HeldObject.gameObject == col.gameObject) {
+								return;
+							}
+
+							if (OnButtonActivated != null)
+								OnButtonActivated ();	// Fire the event cannons!
+
+							buttonActivated = true;
+
+						}
+					} else if (col.GetComponent<Puzzle_KeyObject> ()) {
+
+						if (playerHolder.IsHolding)
 						if (playerHolder.HeldObject.gameObject == col.gameObject) {
 							return;
 						}
-
+						
 						if (OnButtonActivated != null)
 							OnButtonActivated ();	// Fire the event cannons!
-
+		
 						buttonActivated = true;
 
+						if (destroyKeyObj)
+							Destroy (col.gameObject);
+
+						// shift object 50000 units away into what most likely is unused space
+						if (removeKeyObj)
+							col.gameObject.transform.position -= Vector3.one * 50000;	
+					
 					}
 				}
-				else if (col.GetComponent<Puzzle_KeyObject> ()) {
+			}
 
-					if(playerHolder.IsHolding)
-					if (playerHolder.HeldObject.gameObject == col.gameObject) {
-						return;
-					}
-						
+			if (buttonType == ButtonType.LOCKSWITCH) {
+
+				if (col != null && keyObj != null)
+				if (col.transform.name == keyObj.transform.name) {
+
 					if (OnButtonActivated != null)
 						OnButtonActivated ();	// Fire the event cannons!
-		
+
 					buttonActivated = true;
 
-					if (destroyKeyObj)
-						Destroy (col.gameObject);
+					// Destroy held key
+					Destroy (col.gameObject);
 
-					// shift object 50000 units away into what most likely is unused space
-					if (removeKeyObj)
-						col.gameObject.transform.position -= Vector3.one * 50000;	
-					
+					// Show the key getting used
+					anim.SetTrigger ("Success");
+
 				}
-			}
-		}
-
-		if (buttonType == ButtonType.LOCKSWITCH) {
-
-			if(col != null && keyObj != null)
-			if (col.transform.name == keyObj.transform.name) {
-
-				if (OnButtonActivated != null)
-					OnButtonActivated ();	// Fire the event cannons!
-
-				buttonActivated = true;
-
-				// Destroy held key
-				Destroy (col.gameObject);
-
-				// Show the key getting used
-				anim.SetTrigger ("Success");
 
 			}
-
 		}
-
 	}
 
 	void OnTriggerExit(Collider col){
-
-		if (buttonType == ButtonType.NORMAL) {
+		
+		// If the puzzle isn't won yet
+		if (!winState) {
+			if (buttonType == ButtonType.NORMAL) {
 			
-			if (col.transform.tag == "Player" && buttonActivated) {
+				if (col.transform.tag == "Player" && buttonActivated) {
 
-				Debug.Log ("Normal OFF");
+					Debug.Log ("Normal OFF");
 
-				buttonActivated = false;
+					buttonActivated = false;
 
-				if (OnButtonReset != null)
-					OnButtonReset ();
+					if (OnButtonReset != null)
+						OnButtonReset ();
 
-			}
-
-		}
-
-		if (buttonType == ButtonType.WEIGHT) {
-
-			if (weightObjects.Contains (col.gameObject) && col.transform.GetComponent<WeightObject>()) {
-
-				weightObjects.Remove (col.gameObject);
-
-				currentWeightAchieved -= col.transform.GetComponent<WeightObject> ().weightValue;
-
-				Debug.Log ("Removed: " + col.gameObject.name);
+				}
 
 			}
 
-		}
+			if (buttonType == ButtonType.WEIGHT) {
 
-		if (buttonType == ButtonType.KEY) {
+				if (weightObjects.Contains (col.gameObject) && col.transform.GetComponent<WeightObject> ()) {
 
-			if (buttonActivated) {
+					weightObjects.Remove (col.gameObject);
 
-				// If you're using a specific object, check for it first.
-				if (useSpecificObject) {
+					currentWeightAchieved -= col.transform.GetComponent<WeightObject> ().weightValue;
 
-					if (col.transform.name == keyObj.transform.name) {
+					Debug.Log ("Removed: " + col.gameObject.name);
 
-						if (OnButtonActivated != null)
-							OnButtonActivated ();	// Fire the event cannons!
+				}
 
-						buttonActivated = true;
+			}
 
+			if (buttonType == ButtonType.KEY) {
+
+				if (buttonActivated) {
+
+					// If you're using a specific object, check for it first.
+					if (useSpecificObject) {
+
+						if (col.transform.name == keyObj.transform.name) {
+
+							if (OnButtonActivated != null)
+								OnButtonActivated ();	// Fire the event cannons!
+
+							buttonActivated = true;
+
+						}
+
+					} else if (col.GetComponent<Puzzle_KeyObject> ()) {
+
+						if (OnButtonReset != null)
+							OnButtonReset ();	// Fire the event cannons!
+
+						buttonActivated = false;
 					}
 
 				}
-				else if (col.GetComponent<Puzzle_KeyObject> ()) {
-
-					if (OnButtonReset != null)
-						OnButtonReset ();	// Fire the event cannons!
-
-					buttonActivated = false;
-				}
 
 			}
-
 		}
-
 	}
 		
 	void OnCollisionEnter(Collision col){
+		
+		// If the puzzle isn't won yet
+		if (!winState) {
+			if (buttonType == ButtonType.SLAM) {
 
-		if (buttonType == ButtonType.SLAM) {
+				if (col.transform.tag == "Player" && playerObj.GetComponent<BallController> ().IsSlamming && !winState) {
 
-			if (col.transform.tag == "Player" && playerObj.GetComponent<BallController> ().IsSlamming && !winState) {
-
-				// TIMER SETUP
-				if (timerToggle) {
-					if (winZone) {
-						resetTimer.ClaimTimer (checkpoint, TIMERTYPE.BUTTON, this.gameObject, timerTime, winZone);
-						winZone.PuzzleON ();
+					// TIMER SETUP
+					if (timerToggle) {
+						if (winZone) {
+							resetTimer.ClaimTimer (checkpoint, TIMERTYPE.BUTTON, this.gameObject, timerTime, winZone);
+							winZone.PuzzleON ();
+						} else
+							resetTimer.ClaimTimer (checkpoint, TIMERTYPE.BUTTON, this.gameObject, timerTime);
 					}
-					else
-						resetTimer.ClaimTimer (checkpoint, TIMERTYPE.BUTTON, this.gameObject, timerTime);
+					// ----
+
+					ButtonReset ();
+
+					playerObj.GetComponent<BallController> ().CancelBallSlam (true);
+
+					StartCoroutine (ButtonPressed ());
+
+					if (winZone)
+					if (!winZone.gameObject.activeSelf)
+						winZone.gameObject.SetActive (true);
+
 				}
-				// ----
-
-				ButtonReset ();
-
-				playerObj.GetComponent<BallController> ().CancelBallSlam (true);
-
-				StartCoroutine (ButtonPressed ());
-
-				if(winZone)
-				if (!winZone.gameObject.activeSelf)
-					winZone.gameObject.SetActive (true);
 
 			}
 
-		}
+			if (buttonType == ButtonType.PUSHYBALL) {
 
-		if (buttonType == ButtonType.PUSHYBALL) {
+				if (col.transform.tag == "Player" && playerObj.GetComponent<BallController> ().IsSlamming && !winState && keyObj != null) {
 
-			if (col.transform.tag == "Player" && playerObj.GetComponent<BallController> ().IsSlamming && !winState && keyObj != null) {
+					playerObj.GetComponent<BallController> ().CancelBallSlam (true);
 
-				playerObj.GetComponent<BallController> ().CancelBallSlam (true);
+					StartCoroutine (ButtonPressed ());
 
-				StartCoroutine (ButtonPressed ());
+					ResetBall ();
 
-				ResetBall ();
+				}
 
 			}
-
 		}
-
 	}
 
 	public void ResetKeyObj(GameObject obj){
@@ -412,6 +480,10 @@ public class PuzzleButton : MonoBehaviour {
 			startingRotation = respawnPoint.transform.rotation;
 			startingScale = obj.transform.localScale;
 
+			// Tell the ball what it's new start params are
+			if (keyObj.GetComponent<Ball_Reset> ())
+				keyObj.GetComponent<Ball_Reset> ().SetResetParameters (startingPosition,startingRotation.eulerAngles,startingScale);
+			
 		}
 
 	}
@@ -422,6 +494,10 @@ public class PuzzleButton : MonoBehaviour {
 		keyObj.transform.position = startingPosition;
 		keyObj.transform.rotation = startingRotation;
 		keyObj.transform.localScale = startingScale;
+
+		// Tell the ball what it's new start params are
+		if (keyObj.GetComponent<Ball_Reset> ())
+			keyObj.GetComponent<Ball_Reset> ().SetResetParameters (startingPosition,startingRotation.eulerAngles,startingScale);
 
 		if(keyObj.GetComponent<Rigidbody> ())
 		keyObj.GetComponent<Rigidbody> ().velocity = Vector3.zero;
@@ -441,6 +517,8 @@ public class PuzzleButton : MonoBehaviour {
 	#region SLAM BUTTON FUNCTIONS
 
 	void Complete(){
+		
+		winZone.OnWinZoneActivate -= Complete;
 
 		winState = true;
 
@@ -462,6 +540,8 @@ public class PuzzleButton : MonoBehaviour {
 	// On an event, but can be publicly called
 	public void ButtonReset(){
 
+		resetTimer.GetComponent<ActivatedTimer> ().OnTimerRunOut -= ButtonReset;
+
 		if (!winState && buttonType != ButtonType.LOCKSWITCH) {
 			anim.ResetTrigger ("Push");
 			anim.SetTrigger ("Reset");
@@ -478,5 +558,34 @@ public class PuzzleButton : MonoBehaviour {
 	}
 
 	#endregion
+
+	public void KeyCheck()
+	{		
+		GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
+
+		winState = true;
+
+		if (buttonType == ButtonType.SLAM)
+		{
+			anim.ResetTrigger ("Reset");
+			anim.SetTrigger ("Push");
+		}
+
+		if (buttonType == ButtonType.PUSHYBALL)
+		{
+			anim.ResetTrigger ("Reset");
+			anim.SetTrigger ("Push");
+		}
+	}
+
+	// Disables the button for good
+	void DisableButton()
+	{
+		ballWinZone.OnWinZoneActivate -= DisableButton;
+
+		winState = true;
+		anim.ResetTrigger ("Reset");
+		anim.SetTrigger ("Push");
+	}
 
 }

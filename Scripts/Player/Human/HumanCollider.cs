@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class HumanCollider : MonoBehaviour
 {
+	[SerializeField] LayerMask castLayers;
 	[SerializeField] GameObject rayPointsRoot;
 	RayPoint[] rayPoints;
 
@@ -55,15 +56,17 @@ public class HumanCollider : MonoBehaviour
 
 	public bool HitCeilingThisFrame()
 	{
-		const int neededForHit = 6;
+		const int NeededForHit = 6;
+		const float HeightForCeilHit = 0.27f;
 		int count = 0;
+
 		List<Ray> freeRays = new List<Ray>();
+		float[] heightToHitList = new float[rayPoints.Length];
 
 		for (int i = 0; i < rayPoints.Length; i++)
 		{
-			Ray ray = new Ray(rayPoints[i].GetPosition + (Vector3.up * controllerHeight), Vector3.up);
-
-			if (Physics.Raycast(ray, 0.2f, -1, QueryTriggerInteraction.Ignore))
+			Ray ray = new Ray();
+			if (CastUp(i, out ray, out heightToHitList[i]))
 				count++;
 			else
 				freeRays.Add(ray);
@@ -72,14 +75,25 @@ public class HumanCollider : MonoBehaviour
 		if (count == 0)
 			cancelFrames++;
 
-		if (count <= neededForHit && count != 0)
+		if (count <= NeededForHit && count != 0)
 		{
 			cancelFrames = 0;
 			NudgeOver(freeRays);
 			return false;
 		}
 
-		return count != 0;
+		if (count != 0)
+		{
+			float avg = 0;
+			for (int i = 0; i < heightToHitList.Length; i++)
+				avg += heightToHitList[i];
+
+			avg = avg / heightToHitList.Length;
+
+			return avg <= HeightForCeilHit;
+		}
+
+		return false;
 	}
 
 	Vector3 noInputDir = Vector3.zero;
@@ -115,20 +129,48 @@ public class HumanCollider : MonoBehaviour
 
 		for (int i = 0; i < 3; i++)
 		{
-			transform.position += direction * 0.05f;
+			humanController.CharController.Move(direction * 0.05f);
 
 			bool hittingStuff = false;
 			for (int j = 0; j < rayPoints.Length; j++)
 			{
-				Ray ray = new Ray(rayPoints[j].GetPosition + (Vector3.up * controllerHeight), Vector3.up);
-
-				if (Physics.Raycast(ray, 0.2f, -1, QueryTriggerInteraction.Ignore))
+				Ray ray = new Ray();
+				float height;
+				if (CastUp(j, out ray, out height))
 					hittingStuff = true;
 			}
 
 			if (!hittingStuff)
 				break;
 		}
+	}
+
+	bool CastUp(int i, out Ray ray, out float heightHit)
+	{
+		const float CeilingHeightCheck = 0.65f;
+		const float HeightDownSlightly = 0.5f;
+		const float HeadInset = 0.5f;
+
+		Vector3 dirToCenter = (rayPoints[i].GetPosition - transform.position).normalized;
+		Vector3 dirToCenterFlipped = dirToCenter; dirToCenterFlipped.y = -dirToCenter.y;
+		ray = new Ray(rayPoints[i].GetPosition + (Vector3.up * (controllerHeight - HeightDownSlightly)) -
+			(dirToCenter * HeadInset), dirToCenterFlipped);
+		heightHit = float.MaxValue;
+
+		RaycastHit hitInfo;
+
+		if (Physics.Raycast(ray, out hitInfo, CeilingHeightCheck, castLayers, QueryTriggerInteraction.Ignore))
+		{
+			if (!hitInfo.collider.GetComponent<NoNudge>())
+			{
+				//Debug.DrawLine(ray.origin, ray.origin + (ray.direction * CeilingHeightCheck), Color.red);
+				heightHit = hitInfo.distance;
+				return true;
+			}
+		}
+
+		//Debug.DrawLine(ray.origin, ray.origin + (ray.direction * CeilingHeightCheck), Color.white);
+		return false;
 	}
 
 	public void CustomUpdate(float playerDownVel)
@@ -216,7 +258,7 @@ public class HumanCollider : MonoBehaviour
 		RaycastHit hitMan;
 		Debug.DrawLine(rayMan.origin, rayMan.origin + (rayMan.direction * length), Color.white);
 
-		if (Physics.Raycast(rayMan, out hitMan, length, -1, QueryTriggerInteraction.Ignore))
+		if (Physics.Raycast(rayMan, out hitMan, length, castLayers, QueryTriggerInteraction.Ignore))
 		{
 			float angle = Vector3.Dot(rayMan.direction, hitMan.normal);
 			angle = 180 - (Mathf.Acos(angle) * Mathf.Rad2Deg);

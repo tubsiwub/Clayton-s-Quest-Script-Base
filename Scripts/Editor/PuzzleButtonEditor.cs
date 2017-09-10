@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEditor;
 
 [CustomEditor(typeof(PuzzleButton))]
+[CanEditMultipleObjects]
 public class PuzzleButtonEditor : Editor {
 
 
@@ -17,6 +18,7 @@ public class PuzzleButtonEditor : Editor {
 	SerializedProperty keyObj;
 	SerializedProperty winZone;
 	SerializedProperty checkpoint;
+	SerializedProperty ballWinZone;
 
 
 	void OnEnable(){
@@ -31,6 +33,7 @@ public class PuzzleButtonEditor : Editor {
 		keyObj = serializedObject.FindProperty ("keyObj");
 		winZone = serializedObject.FindProperty ("winZone");
 		checkpoint = serializedObject.FindProperty ("checkpoint");
+		ballWinZone = serializedObject.FindProperty ("ballWinZone");
 
 	}
 
@@ -65,6 +68,7 @@ public class PuzzleButtonEditor : Editor {
 		if (buttonType == ButtonType.PUSHYBALL) {
 
 			EditorGUILayout.PropertyField (keyObj, new GUIContent("Push Ball: ", "Place the first target here; all later ones will override this slot.  This object is what gets reset when pushed."));
+			EditorGUILayout.PropertyField (ballWinZone, new GUIContent("Ball Win Zone: ", "The win zone - disables button when activated"));
 
 		}
 

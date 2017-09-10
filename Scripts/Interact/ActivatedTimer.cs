@@ -225,6 +225,9 @@ public class ActivatedTimer : MonoBehaviour {
 
 	public void Complete(){
 
+		if(winZone)
+			winZone.OnWinZoneActivate -= Complete;
+		
 		winState = true;
 
 		if(winZone)
@@ -263,12 +266,29 @@ public class ActivatedTimer : MonoBehaviour {
 
 	void WaitForCutscene(){
 
+		// Reset event calls
+		if (timerType == TIMERTYPE.QUEST) 
+			if (scriptStateManager) 
+				if (questNPC)  questNPC.GetComponent<NPC_QuestContainer> ().OnQuestStarted -= WaitForCutscene;
+
+		if (timerType == TIMERTYPE.BUTTON) 
+			if (scriptStateManager) 
+				if (puzzleButton) puzzleButton.GetComponent<PuzzleButton> ().OnButtonActivated -= WaitForCutscene;
+
+		if (timerType == TIMERTYPE.TRIGGER) 
+			if (scriptStateManager)
+				if (triggerObj) triggerObj.GetComponent<Cutscene_TriggerScript> ().OnTriggered -= WaitForCutscene;
+			
+
 		waitForCutscene = true;
 
 	}
 
 	void CutsceneStartTimer(){
 
+		if (scriptStateManager) 
+			scriptStateManager.OnCutsceneCancel -= CutsceneStartTimer;
+		
 		waitForCutscene = false;
 
 		StartTimer ();
@@ -279,6 +299,20 @@ public class ActivatedTimer : MonoBehaviour {
 
 	// BEGIN timer
 	public void StartTimer(){
+
+		// Reset all event calls
+		if (timerType == TIMERTYPE.QUEST) 
+			if (!scriptStateManager) 
+				if (questNPC)  questNPC.GetComponent<NPC_QuestContainer> ().OnQuestStarted -= StartTimer;
+
+		if (timerType == TIMERTYPE.BUTTON) 
+			if (!scriptStateManager)
+				if (puzzleButton) puzzleButton.GetComponent<PuzzleButton> ().OnButtonActivated -= StartTimer;
+
+		if (timerType == TIMERTYPE.TRIGGER) 
+			if (!scriptStateManager) 
+				if (triggerObj) triggerObj.GetComponent<Cutscene_TriggerScript> ().OnTriggered -= StartTimer;
+			
 
 		winState = false;
 
@@ -308,6 +342,10 @@ public class ActivatedTimer : MonoBehaviour {
 	// END timer
 	public void TimerReset(){	// doesn't fire a 'FAIL' event when ended
 
+		// Reset event calls
+		if (timerType == TIMERTYPE.BUTTON) 
+			if (puzzleButton) puzzleButton.GetComponent<PuzzleButton> ().OnButtonReset -= TimerReset;
+
 		winState = false;
 
 		// Placeholder for other code should we need to reset specifics
@@ -322,7 +360,8 @@ public class ActivatedTimer : MonoBehaviour {
 		timerStarted = false;
 
 		if (!winState) {
-			HealthManager.instance.LoseAllLives (HealthManager.AnimType.Default);
+			// Andrew was here (PuzzleFail)
+			HealthManager.instance.LoseAllLives (HealthManager.AnimType.PuzzleFail);
 		}
 
 		transform.GetChild (0).gameObject.SetActive (false);	// TimerText

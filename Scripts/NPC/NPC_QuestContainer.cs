@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -38,7 +39,11 @@ public class NPC_QuestContainer : MonoBehaviour {
 	public delegate void QuestNPC_Failed();
 	public event QuestNPC_Failed OnQuestFailed;	// - fire when failed
 
+	public delegate void QuestNPC_CompleteDialogue();
+	public event QuestNPC_CompleteDialogue OnQuestCompleteDialogue;	
+
 	NPC_QuestType questTypeScript;
+	InteractPopup_DistanceCheck interactPopup;
 
 	public bool simpleShift;	// Instead of instantiating an object, shift a current one over
 
@@ -70,25 +75,18 @@ public class NPC_QuestContainer : MonoBehaviour {
 
 	public bool questInProgress = false;
 	public bool questStartedCheck = false;
-	public bool questFailed = false;
 	public bool questFailedOnce = false;
 
-
 	// Dialogue
-
 	public string startingDialogue;
-
 	public string questStartedDialogue;
-
 	public string questFailedDialogue;
-
 	public string questCompleteDialogue;
-
 	public string endingDialogue;
 
+	MenuManager menuManager;
 
 	string storageKey = "";
-
 
 	void Start () {
 
@@ -97,22 +95,35 @@ public class NPC_QuestContainer : MonoBehaviour {
 			GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck += KeyCheck;
 			storageKey = GetComponent<SavingLoading_StorageKeyCheck> ().storageKey;
 		}
+
+		SceneLoader.OnSceneLoaderLoad += ResetQuest;
+		SceneManager.sceneLoaded += SceneLoadedEvent;
 			
+		menuManager = GameObject.Find ("In-Game Menus(Clone)").GetComponent<MenuManager> ();
 		questTypeScript = specificQuest.GetComponent<NPC_QuestType> ();
+
+		menuManager.OnQuit += AboutToQuit;
+
+		// Find ref.
+		timerScript = GameObject.Find ("TimerUI").GetComponent<ActivatedTimer> ();	// find timer
+		candyUIObj = GameObject.Find ("MainHUDCanvas").transform.GetChild (1);
+		playerObj = GameObject.FindWithTag ("Player");
+		playerHolder = GameObject.FindWithTag ("Player").GetComponentInChildren<PlayerHolder> ();
+
+		interactPopup = GetComponentInChildren<InteractPopup_DistanceCheck> ();
+		if (interactPopup == null) Debug.LogError ("No interact popup", this.gameObject);	// just make sure
 
 		questStatus = SavingLoading.instance.LoadQuestStatus_Container(storageKey);
 		questTypeScript.QuestStatus = SavingLoading.instance.LoadQuestStatus_Type(storageKey);
 
-		timerScript = GameObject.Find ("TimerUI").GetComponent<ActivatedTimer> ();	// find timer
+		// Prevent QuestStart appearing if we load into a started quest
+		if (questStatus == QUEST_STATUS.STARTED)
+		{
+			questTypeScript.ShowQuestStart = false;
+		}
 
-
-		candyUIObj = GameObject.Find ("MainHUDCanvas").transform.GetChild (1);
-
-		ChangeDialogue (startingDialogue);
-
-		playerObj = GameObject.FindWithTag ("Player");
-
-		playerHolder = GameObject.FindWithTag ("Player").GetComponentInChildren<PlayerHolder> ();
+		SetQuestLoadSpecifics (false);
+		LoadKeyDialogue ();
 
 		dialogueType.GetComponent<InteractPopup_DistanceCheck> ().OnDialogueFinish += DialogueFinish;
 
@@ -123,8 +134,6 @@ public class NPC_QuestContainer : MonoBehaviour {
 		// ...then give to the quest
 		questTypeScript.npcColor = npcColor;
 		questTypeScript.npcName = npcName;
-
-		LoadKeyDialogue ();
 
 	}	// Start
 
@@ -155,171 +164,44 @@ public class NPC_QuestContainer : MonoBehaviour {
 
 	}
 
-
-	// If storageKey marks this as completed, perform these actions
-	void KeyCheck(){
-
-		rewardAmount = 0;
-
-		rewardGiven = true;
-
-		questStatus = QUEST_STATUS.COMPLETE;
-		questTypeScript.QuestStatus = QUEST_STATUS.COMPLETE;
-		SavingLoading.instance.SaveQuestStatus (questStatus, questTypeScript.QuestStatus, storageKey);
-
-		ChangeDialogue (endingDialogue);
-
-		GetComponent<SavingLoading_StorageKeyCheck> ().enabled = false;
-	}
-
-
-	bool questComplete = false;
-	bool rewardGiven = false;
-
-	void QuestComplete(){
-
-		if (questTypeScript.questType == QUESTTYPE.GATHER)
-			StartCoroutine(CandyPopupDown ());
-		
-		questStatus = QUEST_STATUS.FINISHED;
-		questTypeScript.QuestStatus = QUEST_STATUS.FINISHED;
-		SavingLoading.instance.SaveQuestStatus (questStatus, questTypeScript.QuestStatus, storageKey);
-
-		ChangeDialogue (questCompleteDialogue);
-
-		questComplete = true;
-
-		questInProgress = false;
-
-
-	}
-
-	void QuestFailed(){
-
-		if (questStatus == QUEST_STATUS.STARTED) {
-			
-			questFailed = true;
-			questFailedOnce = true;
-
-			if (OnQuestFailed != null)
-				OnQuestFailed ();
-
-			questStatus = QUEST_STATUS.FAILED;
-			questTypeScript.QuestStatus = QUEST_STATUS.FAILED;
-			SavingLoading.instance.SaveQuestStatus (questStatus, questTypeScript.QuestStatus, storageKey);
-
-			ChangeDialogue (questFailedDialogue);
-
-			ResetQuest ();
-
-			questStartedCheck = false;
-			questInProgress = false;
-			questComplete = false;
+	void SetQuestLoadSpecifics(bool cutsceneActive)
+	{		
+		if(!GetComponent<NPC_QuestContainer>()){
+			interactPopup = GetComponentInChildren<InteractPopup_DistanceCheck> ();
+			if (interactPopup == null) Debug.LogError ("No interact popup", this.gameObject);	// just make sure
 		}
-
-	}
-
-	void ResetQuest(){
-
-		questTypeScript.ResetQuest ();
-
-	}
-
-
-	// Called every time the dialogue is closed
-	void DialogueFinish(){
-
-		if (!questFailed) {
-			if (questComplete && !rewardGiven) {
-
-				for (int i = 0; i < rewardAmount; i++) {
-					StartCoroutine (SpawnReward (i));
-				}
-
-				rewardAmount = 0;
-
-				rewardGiven = true;
-
-				questStatus = QUEST_STATUS.COMPLETE;
-				questTypeScript.QuestStatus = QUEST_STATUS.COMPLETE;
-				SavingLoading.instance.SaveQuestStatus (questStatus, questTypeScript.QuestStatus, storageKey);
-
-				ChangeDialogue (endingDialogue);
-
-				// Save the tags - only when quest is COMPLETE
-				SavingLoading.instance.SaveStorageKey (GetComponent<SavingLoading_StorageKeyCheck> ().storageKey, true);
-				SavingLoading.instance.SaveData ();
-
-			}
-
-			// Initial check~ we actually start the quest just below.
-			if (!questComplete && !rewardGiven && !questInProgress) {
-
-				ChangeDialogue (questStartedDialogue);
-
-				questInProgress = true;
-
-			}
-
-			// If quest just started, perform start events
-			if (questStartedCheck != questInProgress && !questComplete) {
-
-				StartQuest ();
-
-			}
-
-			// stores the difference
-			questStartedCheck = questInProgress;
-
-		} else {
-			
-			if (!questComplete && !rewardGiven && !questInProgress) {
-
-				questStatus = QUEST_STATUS.NEUTRAL;
-				questTypeScript.QuestStatus = QUEST_STATUS.NEUTRAL;
-				SavingLoading.instance.SaveQuestStatus (questStatus, questTypeScript.QuestStatus, storageKey);
-
-				ChangeDialogue (startingDialogue);
-
-				questFailed = false;
-
-			}
-
-		}
-
-
-	}	// DialogueFinish
-
-
-
-	// Begin necessary "Start Quest" events
-	void StartQuest(){
 
 		if (questStatus == QUEST_STATUS.NEUTRAL) {
+			interactPopup.SetDialoguePopupTexture ("done");
+			questStartedCheck = false; questInProgress = false;
 
+			if(questTypeScript.endPlatformGoal)
+				questTypeScript.endPlatformGoal.GetComponent<WinZone> ().PuzzleOFF ();
+
+			if (questTypeScript.questType == QUESTTYPE.GATHER) {
+				StartCoroutine(CandyPopupDown ());
+				questTypeScript.candyContainer.SetActive (false);
+			}
+		}
+
+		if (questStatus == QUEST_STATUS.STARTED) {
+			interactPopup.SetDialoguePopupTexture ("done");
+			questStartedCheck = true; questInProgress = true;
 
 			// Quest Initialization
-
-			if (timerScript) {
-
+			if (timerScript) 
+			{
 				// Event
 				timerScript.OnTimerRunOut += QuestFailed;
-
 			}
 
-			if (specificQuest) {
-
+			if (specificQuest) 
+			{
 				// Event
 				questTypeScript.OnQuestComplete += QuestComplete;
 				questTypeScript.OnQuestFailed += QuestFailed;
-
 			}
 
-
-			questStatus = QUEST_STATUS.STARTED;
-			questTypeScript.QuestStatus = QUEST_STATUS.STARTED;
-			SavingLoading.instance.SaveQuestStatus (questStatus, questTypeScript.QuestStatus, storageKey);
-	
 			// Set Timer
 			NPC_QuestType questType;
 			ScriptStateManager stateMan;
@@ -335,24 +217,21 @@ public class NPC_QuestContainer : MonoBehaviour {
 			}
 			// ---
 
-			// Fire event
-			if (OnQuestStarted != null)
-				OnQuestStarted ();
-		
-			// Start the cutscene
-			if (questTypeScript.questType == QUESTTYPE.PLATFORM) {
+			if(questTypeScript.endPlatformGoal)
+				questTypeScript.endPlatformGoal.GetComponent<WinZone> ().PuzzleON ();
 
+			if (questTypeScript.questType == QUESTTYPE.PLATFORM) 
+			{
 				if (questTypeScript.endPlatformGoal)
 					questTypeScript.endPlatformGoal.SetActive (true);
-			
 			}
 
-			// Start the cutscene
-			if (questTypeScript.questType == QUESTTYPE.BALL) {
+			if (questTypeScript.questType == QUESTTYPE.BALL) 
+			{
+				questTypeScript.SpawnBall ();
 
 				if (questTypeScript.endPlatformGoal)
 					questTypeScript.endPlatformGoal.SetActive (true);
-
 			}
 
 			if (questTypeScript.questType == QUESTTYPE.EXPLORE) {
@@ -362,19 +241,261 @@ public class NPC_QuestContainer : MonoBehaviour {
 
 				if (questTypeScript.exploreHintHUDObject)
 					questTypeScript.exploreHintHUDObject.GetComponentInChildren<Text> ().text = questTypeScript.exploreHintText;
-			
+
 			}
+
+			if (questTypeScript.questType == QUESTTYPE.GATHER) 
+			{
+				candyUIObj.GetComponent<PopupText> ().DoPopUp ();
+				questTypeScript.SetCandyContainerActive (true);
+
+				// Go through and load candy checks
+				for (int i = 0; i < specificQuest.transform.GetChild (0).childCount; i++) {
+					specificQuest.transform.GetChild (0).GetChild (0).GetComponent<ObjInfo> ().LOAD ();
+				}
+			}
+
+			// Fire event
+			if (OnQuestStarted != null)
+				OnQuestStarted ();
+			
+			// Play cutscene if one is available
+			if (questTypeScript.cutsceneScriptManager && cutsceneActive)
+				questTypeScript.cutsceneScriptManager.GetComponent<ScriptStateManager> ().TriggerCutscene ();
+		}
+
+		if (questStatus == QUEST_STATUS.FAILED) {
+			interactPopup.SetDialoguePopupTexture ("none");
+			questStartedCheck = false; questInProgress = false;
+
+			if(questTypeScript.endPlatformGoal)
+				questTypeScript.endPlatformGoal.GetComponent<WinZone> ().PuzzleOFF ();
 
 			if (questTypeScript.questType == QUESTTYPE.GATHER) {
+				StartCoroutine(CandyPopupDown ());
+				questTypeScript.candyContainer.SetActive (false);
+			}
+		}
 
-				candyUIObj.GetComponent<PopupText> ().DoPopUp ();
+		if (questStatus == QUEST_STATUS.FINISHED) {
+			interactPopup.SetDialoguePopupTexture ("start");
+			questStartedCheck = true; questInProgress = true;
+
+			if(questTypeScript.endPlatformGoal)
+				questTypeScript.endPlatformGoal.GetComponent<WinZone> ().PuzzleOFF ();
+
+			if (questTypeScript.questType == QUESTTYPE.GATHER) {
+				StartCoroutine(CandyPopupDown ());
+				questTypeScript.candyContainer.SetActive (false);
+			}
+		}
+
+		if (questStatus == QUEST_STATUS.COMPLETE) {
+			interactPopup.SetDialoguePopupTexture ("none");
+			questStartedCheck = true; questInProgress = true;
+
+			if(questTypeScript.endPlatformGoal)
+				questTypeScript.endPlatformGoal.GetComponent<WinZone> ().PuzzleOFF ();
+
+			if (questTypeScript.questType == QUESTTYPE.GATHER) {
+				StartCoroutine(CandyPopupDown ());
+				questTypeScript.candyContainer.SetActive (false);
+			}
+		}
+	}
+
+	void SetQuestStatus(QUEST_STATUS status){
+
+		if (status == QUEST_STATUS.COMPLETE)
+		{
+			if (OnQuestCompleteDialogue != null)
+				OnQuestCompleteDialogue ();
+		}
+
+		questStatus = status;
+		questTypeScript.QuestStatus = status;
+		SavingLoading.instance.SaveQuestStatus (status, status, storageKey);
+		SetQuestLoadSpecifics (true);
+
+	}
+		
+	void SceneLoadedEvent(Scene scene, LoadSceneMode mode){
+
+		// Reset events when the scene changes
+		SceneLoader.OnSceneLoaderLoad -= ResetQuest;
+	}
+
+	// If storageKey marks this as completed, perform these actions
+	void KeyCheck(){
+		
+		GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
+
+		rewardAmount = 0;
+
+		SetQuestStatus (QUEST_STATUS.COMPLETE);
+
+		ChangeDialogue (endingDialogue);
+
+		if (OnQuestStarted != null)
+			OnQuestStarted ();
+
+		GetComponent<SavingLoading_StorageKeyCheck> ().enabled = false;
+	}
+		
+	void QuestComplete(){
+
+		print ("QUEST COMPLETE - NPC CONTAINER");
+
+		if (questTypeScript.questType == QUESTTYPE.GATHER)
+			StartCoroutine(CandyPopupDown ());
+		
+		SetQuestStatus (QUEST_STATUS.FINISHED);
+
+		ChangeDialogue (questCompleteDialogue);
+
+		questInProgress = false;
+	}
+
+	void QuestFailed(){
+
+		if (questStatus == QUEST_STATUS.STARTED) {
+			
+			questFailedOnce = true;
+
+			if (OnQuestFailed != null)
+				OnQuestFailed ();
+
+			SetQuestStatus (QUEST_STATUS.FAILED);
+
+			ChangeDialogue (questFailedDialogue);
+
+			ResetQuest ();
+
+			questStartedCheck = false;
+			questInProgress = false;
+		}
+
+	}
+
+	void AboutToQuit()
+	{
+		print ("About to quit");
+
+		// Remove event, allowing partial quest data to save when quitting the game
+		SceneLoader.OnSceneLoaderLoad -= ResetQuest;
+		menuManager.OnQuit -= AboutToQuit;
+	}
+
+	// This gets overridden by a storage key check
+	void ResetQuest(){
+
+		print ("RESET");
+
+		SceneLoader.OnSceneLoaderLoad -= ResetQuest;
+
+		if (specificQuest) {
+
+			// Event
+			questTypeScript.OnQuestComplete -= QuestComplete;
+			questTypeScript.OnQuestFailed -= QuestFailed;
+
+		}
+
+		// Set status to neutral
+		SetQuestStatus (QUEST_STATUS.NEUTRAL);
+
+		// Perform Neutral status initialization
+		interactPopup.SetDialoguePopupTexture ("done");
+		questStartedCheck = false; questInProgress = false;
+
+		if(questTypeScript.endPlatformGoal)
+			questTypeScript.endPlatformGoal.GetComponent<WinZone> ().PuzzleOFF ();
+
+		if (questTypeScript.questType == QUESTTYPE.GATHER) {
+			StartCoroutine(CandyPopupDown ());
+			questTypeScript.candyContainer.SetActive (false);
+			SavingLoading.instance.ResetStoredCandy (SceneManager.GetActiveScene ().buildIndex);
+		}
+
+		// change dialogue to neutral state
+		ChangeDialogue (startingDialogue);
+
+		questTypeScript.ResetQuest ();
+
+	}
+
+	// Called every time the dialogue is closed
+	void DialogueFinish(){
+
+		if (questStatus != QUEST_STATUS.FAILED) {
+			
+			if (questStatus == QUEST_STATUS.FINISHED) 
+			{
+				// Remove event so it doesn't trigger...
+				GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
+				questTypeScript.GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
+				// Then turn it off after...
+				GetComponent<SavingLoading_StorageKeyCheck> ().enabled = false;
+				questTypeScript.GetComponent<SavingLoading_StorageKeyCheck> ().enabled = false;
+
+				// Save the tags - only when quest is COMPLETE
+				SavingLoading.instance.SaveStorageKey (GetComponent<SavingLoading_StorageKeyCheck> ().storageKey, true);
+				SavingLoading.instance.SaveData ();
+
+				print ("TEST");
+
+				for (int i = 0; i < rewardAmount; i++) 
+				{
+					StartCoroutine (SpawnReward (i));
+				}
+
+				rewardAmount = 0;
+
+				SetQuestStatus (QUEST_STATUS.COMPLETE);
+
+				ChangeDialogue (endingDialogue);
+			}
+
+			// Initial check~ we actually start the quest just below.
+			if (questStatus != QUEST_STATUS.FINISHED && 
+				questStatus != QUEST_STATUS.COMPLETE && 
+				!questInProgress) 
+			{
+				ChangeDialogue (questStartedDialogue);
+
+				questInProgress = true;
+			}
+
+			// If quest just started, perform start events
+			if (questStartedCheck != questInProgress && 
+				questStatus != QUEST_STATUS.FINISHED) {
+
+				StartQuest ();
 
 			}
 
-			// Play cutscene if one is available
-			if (questTypeScript.cutsceneScriptManager)
-				questTypeScript.cutsceneScriptManager.GetComponent<ScriptStateManager> ().TriggerCutscene ();
-		
+			// stores the difference
+			questStartedCheck = questInProgress;
+
+		} else {
+			
+			if (questStatus != QUEST_STATUS.FINISHED && 
+				questStatus != QUEST_STATUS.COMPLETE && 
+				!questInProgress) 
+			{
+				SetQuestStatus (QUEST_STATUS.NEUTRAL);
+
+				ChangeDialogue (startingDialogue);
+			}
+		}
+	}	// DialogueFinish
+
+	// Begin necessary "Start Quest" events
+	void StartQuest()
+	{
+		if (questStatus == QUEST_STATUS.NEUTRAL) 
+		{
+			SetQuestStatus (QUEST_STATUS.STARTED);
 		}
 	}
 
@@ -383,13 +504,18 @@ public class NPC_QuestContainer : MonoBehaviour {
 		yield return new WaitForSeconds (i / 100);
 
 		// spawn a marble
-		if (!simpleShift){
+		if (!simpleShift) {
 			GameObject reward; 
 			reward = (GameObject)Instantiate (rewardObject, playerObj.transform.position + Random.insideUnitSphere * 12, Quaternion.identity);
 			StartCoroutine (FlyTowardPlayer (reward));
-		}
-		else
+		} else {
 			rewardObject.transform.position = playerObj.transform.position + (Vector3.up * (5 + i));
+
+			if (rewardObject.GetComponent<Pickupable> ())
+				rewardObject.GetComponent<Pickupable> ().ResetStartValues ();
+			else
+				Debug.LogError ("Reward Object isn't a <Pickupable> object.", rewardObject);
+		}
 		
 	}
 
@@ -415,8 +541,6 @@ public class NPC_QuestContainer : MonoBehaviour {
 
 	}	// Update
 		
-
-
 	void OnTriggerEnter(Collider col){
 
 		if (specificQuest) {

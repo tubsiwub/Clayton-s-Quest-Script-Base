@@ -8,6 +8,7 @@ public class SceneLoaderEditor : Editor
 	//SceneLoader sceneLoader;
 	SerializedProperty scenePaths;
 	SerializedProperty showLoadScreen;
+	SerializedProperty loaderId;
 
 	const float smallSpacing = 8;
 	const float sectionSpacing = 16;
@@ -18,6 +19,7 @@ public class SceneLoaderEditor : Editor
 
 		scenePaths = serializedObject.FindProperty("scenePaths");
 		showLoadScreen = serializedObject.FindProperty("showLoadScreen");
+		loaderId = serializedObject.FindProperty("loaderId");
 	}
 
 	public override void OnInspectorGUI()
@@ -33,6 +35,8 @@ public class SceneLoaderEditor : Editor
 
 		ArrayGUI(scenePaths);
 		GUILayout.Space(smallSpacing);
+
+		EditorGUILayout.PropertyField(loaderId);
 		EditorGUILayout.PropertyField(showLoadScreen);
 
 		serializedObject.ApplyModifiedProperties();

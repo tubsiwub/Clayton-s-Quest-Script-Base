@@ -22,7 +22,7 @@ public class Loader : MonoBehaviour
 
 	bool spawnButterflies = true;       // [SerializeField] 
 	bool enablePauseMenu = true;        // [SerializeField] 
-	bool startFromSceneBase = false;        // [SerializeField] 
+	[SerializeField] bool startFromSceneBase = false;
 	[SerializeField] bool newGame = true;
 	public bool NewGame { get { return newGame; } }
 	[SerializeField] float cullerDistFromPlayer = 60;

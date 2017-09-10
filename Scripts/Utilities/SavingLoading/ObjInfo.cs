@@ -6,7 +6,7 @@ using UnityEngine.SceneManagement;
 public class ObjInfo : MonoBehaviour {
 
 	[SerializeField] string prefabLocation;
-	[SerializeField] bool assignRandomName = true;
+	public bool assignRandomName = true;
 
 	string objectRefID;
 
@@ -15,9 +15,14 @@ public class ObjInfo : MonoBehaviour {
 	void Awake()
 	{
 		if (assignRandomName)
-			name = name + "_" + MathFunctions.GetStringFromPosition(transform.position);
+			name = prefabLocation + "_" + MathFunctions.GetHexStringFromPosition(transform.position);
 
 		objectRefID = name;
+	}
+
+	void Start()
+	{
+		LOAD();
 	}
 
 	public void SAVE(bool overwrite, bool exists)

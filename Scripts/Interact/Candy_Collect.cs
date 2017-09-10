@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class Candy_Collect : MonoBehaviour {
 
@@ -10,21 +11,9 @@ public class Candy_Collect : MonoBehaviour {
 	public delegate void Candy_Collected();
 	public static event Candy_Collected OnCandyCollect; // - fire when collected
 
-	ObjInfo info;
-
-	void Awake () {
-		info = GetComponent<ObjInfo>();
-	}
-
-	void Start () {
-
-		// Snap objects to the ground in some way
-//		Ray ray = new Ray (transform.position, -Vector3.up);
-//		RaycastHit hit;
-//		if (Physics.Raycast (ray, out hit)) {
-//			transform.position = hit.point + Vector3.up * heightFromFloor;
-//		}
-
+	void Start () 
+	{
+		// candy will be deleted if necessary before this gets called
 		StartCoroutine(WaitAFrame());
 	}
 
@@ -32,26 +21,21 @@ public class Candy_Collect : MonoBehaviour {
 	{
 		yield return null;
 
-		info.LOAD();
+		SavingLoading.instance.SaveStoredCandy (this.gameObject, false);
 	}
 
-
-	void Update () {
-		
-	}
-
-
-	void OnTriggerEnter(Collider col){
-
-		if (col.transform.tag == "Player") {
-
+	void OnTriggerEnter(Collider col)
+	{
+		if (col.transform.tag == "Player") 
+		{
 			if (OnCandyCollect != null)
 				OnCandyCollect ();
 
-			info.SAVE(true, false);
-			SavingLoading.instance.SaveData();
+			// in SavingLoading, mark this candy as 'Collected' - store using name
+			SavingLoading.instance.SaveStoredCandy (this.gameObject, true);
 
-			Destroy (this.gameObject);
+			// kill candy after saving it's fate
+			Destroy(this.gameObject);
 
 		}
 	}

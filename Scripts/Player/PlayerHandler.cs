@@ -6,7 +6,7 @@ using UnityEngine.SceneManagement;
 public class PlayerHandler : MonoBehaviour
 {
 	public enum PlayerState { Human, Ball, Slider, OnRope };
-	public enum SecondaryAction { None, Holding, OnLedge };
+	public enum SecondaryAction { None, Holding, OnLedge, Disable };
 
 	[SerializeField] bool doSlopes = true;
 	[SerializeField] bool doLedges = false;
@@ -20,8 +20,7 @@ public class PlayerHandler : MonoBehaviour
 	public Animator HumanAnimator { get { return humanAnimator; } }
 
 	[SerializeField] Animator faceAnimator;
-
-	Renderer[] humanRends;
+	[SerializeField] Renderer[] humanRends;
 
 	HumanController humanController;
 	BallController ballController;
@@ -36,12 +35,14 @@ public class PlayerHandler : MonoBehaviour
 	PlayerController currentController;
 
 	Vector3 respawnPos = Vector3.zero;
+	Quaternion respawnRot = Quaternion.identity;		// ONLY used for fake checkpoints. ignore otherwise.
 	public bool HasRespawnPos { get { return respawnPos != Vector3.zero; } }
 	const float deathY = -50;
 
 	const float maxFallDist = 30;
 	float heightAtMaxFall = 0;
 	bool setFallDeath = false;
+	public bool AboutToFallDie { get { return setFallDeath; } }
 
 	HealthManager.AnimType lastDeathAnim = HealthManager.AnimType.None;
 	public HealthManager.AnimType LastDeathAnim { get { return lastDeathAnim; } }
@@ -91,6 +92,8 @@ public class PlayerHandler : MonoBehaviour
 	public Vector3 GetVelocity() { return currentController.GetVelocity(); }
 	public bool IsMoving() { return currentController.GetVelocity().magnitude > 0.9f; }
 	public bool IsFrozen { get { return currentController.IsFrozen; } }
+	public bool IsJumpFrozen { get { return currentController.IsJumpFrozen; } }
+	public bool IsHorizontalFrozen { get { return currentController.IsHorizontalFrozen; } }
 	public bool IsPhysicsControlled { get { return currentController.IsPhysicsControlled; } }
 	public bool JustSlammed { get { return ballController.JustSlammed; } }
 
@@ -139,10 +142,19 @@ public class PlayerHandler : MonoBehaviour
 			ready = true;
 	}
 
+	public void SetFreezeJump(bool frozen) { currentController.SetFreezeJump(frozen); }
+	public void SetHorizontalFrozen(bool frozen) { currentController.SetHorizontalFrozen(frozen); }
+
 	// use this to push the player away in a certain direction
 	// direction: normalized vector for which direction to push
 	// force: how much force to apply in this direction
 	public void PushAway(Vector3 direction, float force) { currentController.PushAway(direction, force); }
+
+	public delegate void SwitchEvent();
+	public static event SwitchEvent OnHumanToBall;
+	public static event SwitchEvent OnHumanToBallFinish;
+	public static event SwitchEvent OnBallToHuman;
+	public static event SwitchEvent OnBallToHumanFinish;
 
 	void Awake()
 	{
@@ -203,8 +215,6 @@ public class PlayerHandler : MonoBehaviour
 		SetFaceAnimation("Smile", true);
 		secondaryAction = SecondaryAction.None;
 
-		humanRends = GetComponentsInChildren<SkinnedMeshRenderer>();
-
 		SetFrozen(true, true);
 	}
 
@@ -217,12 +227,16 @@ public class PlayerHandler : MonoBehaviour
 
 			for (int i = 0; i < humanRends.Length; i++)
 				humanRends[i].enabled = false;
+
+			if (OnHumanToBallFinish != null)
+				OnHumanToBallFinish();
 		}
 	}
 
 	public void ToHumanAnimComplete()
 	{
-		// stuff used to happen here, but now it doesn't. meh. 
+		if (OnBallToHumanFinish != null)
+			OnBallToHumanFinish();
 	}
 
 	public void SetRope(Transform nearest)
@@ -230,24 +244,60 @@ public class PlayerHandler : MonoBehaviour
 		nearestRope = nearest;
 	}
 
-	public void SetCheckpoint(Checkpoint newCheckpoint)
+	public void SetCheckpoint(Checkpoint newCheckpoint, bool setInstant = false)
 	{
 		if (lastCheckpoint != null &&
 		newCheckpoint == lastCheckpoint) return;
 
 		if (lastCheckpoint != null) lastCheckpoint.Deactivate();
 		lastCheckpoint = newCheckpoint;
-		lastCheckpoint.Activate();
+		
+
+		if (setInstant)
+			lastCheckpoint.ActivateInstant();
+		else
+			lastCheckpoint.Activate();
+
 		respawnPos = lastCheckpoint.RespawnPos.position;
 		SetFaceAnimation("Overjoyed", 1.5f);
+
+		// don't save checkpoint while in BallDoors
+		if (LevelManager.instance.SceneBaseLoaded)
+		{
+			LevelManager.instance.NewPlayerData();
+			SavingLoading.instance.SaveCheckpoint();
+			SavingLoading.instance.SaveSceneInfo();
+			SavingLoading.instance.SaveData();
+		}
 	}
 
-	public void SetCheckpoint(Vector3 newCheckpoint)
+	// set checkpoint position, without the actual Checkpoint reference
+	public void SetCheckpoint(Vector3 newCheckpoint, Quaternion respawnRotation)
 	{
 		if (lastCheckpoint != null && 
 		newCheckpoint == lastCheckpoint.RespawnPos.position) return;
 
 		respawnPos = newCheckpoint;
+		respawnRot = respawnRotation;
+
+		// never save this on the start scene!
+		if (SceneManager.GetActiveScene().buildIndex != 0)
+		{
+			// only save (from fake checkpoints) in ball doors,
+			// as this is how we start off the scenes
+
+			// oh hey also: save from fake checkpoints when we're setting fake from 
+			// SceneLoader, as otherwise we have no way to load back in the correct level
+			if (!LevelManager.instance.SceneBaseLoaded || lastCheckpoint == null)
+			{
+				SavingLoading.instance.SaveSceneInfo();
+				SavingLoading.instance.SaveData();
+			}
+
+			// if we've set ourselves to this "checkpoint" (not a real checkpoint), we want to cancel the 
+			// ability to respawn to the last (real) checkpoint
+			LevelManager.instance.CancelPlayerData();
+		}
 	}
 
 	public void FindAndSetCheckpoint(string objName)
@@ -263,7 +313,7 @@ public class PlayerHandler : MonoBehaviour
 
 		if (cp != null)
 		{
-			SetCheckpoint(cp.GetComponent<Checkpoint>());
+			SetCheckpoint(cp.GetComponent<Checkpoint>(), true);
 		}
 	}
 
@@ -274,17 +324,22 @@ public class PlayerHandler : MonoBehaviour
 		if (animType != HealthManager.AnimType.None)
 		{
 			if (CurrentState == PlayerState.Ball)
+			{
+				ballController.CancelBallSlam(true);
 				SwitchStateInstant(PlayerState.Human);
+				humanController.ResetJumpState();
+			}
 
-			bool fallToFloor = !IsGrounded() && (animType == HealthManager.AnimType.Default || animType == HealthManager.AnimType.BallToHuman);
-			if (fallToFloor)
-				humanController.SetFloored();
-			else
-				SetFrozen(true, false);
+			bool fallToFloor = !IsGrounded() && (animType == HealthManager.AnimType.Default || 
+				animType == HealthManager.AnimType.BallToHuman || animType == HealthManager.AnimType.PuzzleFail);
+
+			if (fallToFloor) humanController.SetFloored();
+			else SetFrozen(true, false);
 
 			SetFaceAnimation("Shocked");
 			humanAnimator.SetLayerWeight(2, 1);
 			DisableCurrent();
+			playerAttack.enabled = false;
 
 			if (fallToFloor)		// re-enable so we can continue the SetFloored routine
 				humanController.EnableByHandler(Vector3.zero, false);
@@ -297,8 +352,10 @@ public class PlayerHandler : MonoBehaviour
 		{
 			case HealthManager.AnimType.Default:
 				SoundManager.instance.PlayClip("Faint01");
-				int r = Random.Range(1, 4);
-				humanAnimator.CrossFade("hero_death0" + r, 0.1f);
+				{
+					int r = Random.Range(1, 4);
+					humanAnimator.CrossFade("hero_death0" + r, 0.1f);
+				}
 			break;
 
 			case HealthManager.AnimType.Drown:
@@ -307,7 +364,10 @@ public class PlayerHandler : MonoBehaviour
 			break;
 
 			case HealthManager.AnimType.Splat:
-				SoundManager.instance.PlayClip("Faint01");
+				SoundManager.instance.PlayClip("HardLanding");
+				humanAnimator.ResetTrigger("FallDeath");
+				humanAnimator.ResetTrigger("FallDeathFromBall");
+
 				humanAnimator.SetTrigger("FallSplat");
 			break;
 
@@ -316,6 +376,14 @@ public class PlayerHandler : MonoBehaviour
 				rotateMeshLocation.enabled = false;
 				rotateMesh.localPosition += Vector3.down * 0.5f;	// account for animation offset
 				humanAnimator.CrossFade("ball-to-hero_death", 0.1f);
+			break;
+
+			case HealthManager.AnimType.PuzzleFail:
+				SoundManager.instance.PlayClip("Faint01");
+				{
+					int r = Random.Range(1, 3);
+					humanAnimator.CrossFade("hero_puzzleFail0" + r, 0.1f);
+				}
 			break;
 
 			case HealthManager.AnimType.None:
@@ -329,13 +397,23 @@ public class PlayerHandler : MonoBehaviour
 	public void SetOrigamiAnimation(Origami_Collect currentOrigami)
 	{
 		if (CurrentState == PlayerState.Ball)
+		{
+			ballController.CancelBallSlam(true);
 			SwitchStateInstant(PlayerState.Human);
+			humanController.ResetJumpState();
+		}
+
+		KillVelocity();
+		playerHolder.Drop();
 
 		Vector3 facingDir = (currentOrigami.transform.position - transform.position).normalized;
 		facingDir.y = 0; rotateMesh.forward = facingDir;
 
 		humanController.SetFloored();
+
+		humanAnimator.SetLayerWeight(2, 1);
 		humanAnimator.CrossFade("hero_itemHug", 0.1f);
+
 		this.currentOrigami = currentOrigami;
 	}
 
@@ -357,6 +435,8 @@ public class PlayerHandler : MonoBehaviour
 	public void FinishOrigamiAnimation()
 	{
 		SetFrozen(false, false);
+
+		humanAnimator.SetLayerWeight(2, 0);
 		humanAnimator.CrossFade("hero_idle", 0.05f);
 	}
 
@@ -423,11 +503,20 @@ public class PlayerHandler : MonoBehaviour
 	void BeginFallDeath()
 	{
 		bool wasBall = CurrentState == PlayerState.Ball;
+
+		if (!wasBall)
+			playerHolder.Drop();
+
 		if (CurrentState == PlayerState.Ball)
 			SwitchStateInstant(PlayerState.Human);
 
+		SetSecondaryAction(SecondaryAction.Disable);
 		humanController.PrepareForLanding();
 		humanAnimator.SetLayerWeight(2, 1);
+
+		humanAnimator.ResetTrigger("FallDeath");
+		humanAnimator.ResetTrigger("FallDeathFromBall");
+
 		humanAnimator.SetTrigger(wasBall ? "FallDeathFromBall" : "FallDeath");
 		setFallDeath = true;
 	}
@@ -450,24 +539,6 @@ public class PlayerHandler : MonoBehaviour
 
 		if (Input.GetKeyDown(KeyCode.F2))
 			showText = !showText;
-
-		if (Input.GetKeyDown(KeyCode.P) && Input.GetKey(KeyCode.LeftShift))
-		{
-			SavingLoading.instance.SaveSceneInfo();
-
-			GetComponent<ObjInfo>().SAVE(true, true);
-			LevelManager.instance.NewPlayerData();
-
-			SavingLoading.instance.SaveCheckpoint();
-			SavingLoading.instance.SaveData();
-		}
-
-		if (Input.GetKeyDown(KeyCode.O) && Input.GetKey(KeyCode.LeftShift))
-		{
-			SavingLoading.instance.LoadSceneInfo();
-			//SavingLoading.instance.LoadCheckpoint();
-			// dont load player location, that is handled from LevelManager (after scenes loaded)
-		}
 
 		if (CanDoBallToggling())
 			HandleBallToggling();
@@ -548,23 +619,34 @@ public class PlayerHandler : MonoBehaviour
 		if (CurrentState != PlayerState.Human)
 			SwitchState(PlayerState.Human);
 
+		SetFrozen(true, true);
+
 		restartButtonHeld = 0;
 		CancelMaxFallSpeed();
 		currentController.EnableByHandler(Vector3.zero, false);
-		humanController.CancelSetFloored();
+		playerAttack.enabled = true;
 
+		humanController.CancelSetFloored();
 		transform.position = respawnPos;
 
 		if (lastCheckpoint != null)
 			rotateMesh.forward = lastCheckpoint.RespawnPos.forward;
 		else
-			rotateMesh.forward = Vector3.forward;
-		
-		Camera.main.GetComponent<CameraControlDeluxe>().DoCamBehindPlayer();
+			rotateMesh.rotation = Quaternion.Euler(0, respawnRot.eulerAngles.y, 0);
+
+		CameraControlDeluxe cam = Camera.main.GetComponent<CameraControlDeluxe>();
+		cam.DoCamBehindPlayer();
+		cam.OnBehindPlayer += UnfrezePlayerAfterCamBehindPlayer;
 
 		rotateMeshLocation.enabled = true;
 		rotateMesh.localPosition = Vector3.zero;
 		rotateMesh.localRotation = Quaternion.Euler(0, rotateMesh.localEulerAngles.y, 0);
+	}
+
+	void UnfrezePlayerAfterCamBehindPlayer()
+	{
+		Camera.main.GetComponent<CameraControlDeluxe>().OnBehindPlayer -= UnfrezePlayerAfterCamBehindPlayer;
+		SetFrozen(false, false);
 	}
 
 	void LateUpdate()
@@ -586,7 +668,7 @@ public class PlayerHandler : MonoBehaviour
 
 	public void SetSecondaryAction(SecondaryAction action)
 	{
-		if (!currentController.HandsAvailable)
+		if (!currentController.HandsAvailable || action == SecondaryAction.Disable)
 		{
 			playerHolder.enabled = false;
 			playerAttack.enabled = false;
@@ -630,6 +712,8 @@ public class PlayerHandler : MonoBehaviour
 		if (newState == PlayerState.Slider && !doSlopes) return;    // temp
 		if (setFallDeath) return;
 		if (AnimatingDeath) return;
+		if (HasOrigami) return;
+		if (currentController.IsHorizontalFrozen) return;
 
 		HealthManager.instance.SetExternalIsInvincible(false);
 
@@ -662,6 +746,8 @@ public class PlayerHandler : MonoBehaviour
 		if (newState == PlayerState.Slider && !doSlopes) return;    // temp
 		if (setFallDeath) return;
 		// if (AnimatingDeath) return;		// do not worry about this check for INSTANT (since we'll be changing while animating)
+		// if (HasOrigami) return;
+		// if (currentController.IsHorizontalFrozen) return;
 
 		HealthManager.instance.SetExternalIsInvincible(false);
 
@@ -682,7 +768,8 @@ public class PlayerHandler : MonoBehaviour
 
 	void BallToHuman()
 	{
-		SoundManager.instance.PlayClip("BallToHuman0" + Random.Range(1, 4));
+		if (!ballController.JustSlammed)
+			SoundManager.instance.PlayClip("BallToHuman01");	// + Random.Range(1, 4));
 
 		Vector3 dir = ballController.GetDirection; dir.y = 0;
 		dir *= ballController.GetSpeed;
@@ -709,6 +796,9 @@ public class PlayerHandler : MonoBehaviour
 		humanAnimator.SetTrigger("BallToHuman");
 
 		currentController = humanController;
+
+		if (OnBallToHuman != null)
+			OnBallToHuman();
 	}
 
 	void BallToHumanInstant()
@@ -732,11 +822,14 @@ public class PlayerHandler : MonoBehaviour
 		SetFaceAnimation("Smile");
 
 		currentController = humanController;
+
+		if (OnBallToHuman != null)
+			OnBallToHuman();
 	}
 
 	void HumanToBall()
 	{
-		SoundManager.instance.PlayClip("HumanToBall0" + Random.Range(1, 3));
+		SoundManager.instance.PlayClip("HumanToBall01");	// + Random.Range(1, 3));
 
 		rotateMeshLocation.enabled = false;
 		rotateMesh.localPosition = new Vector3(0, 0.65f, 0);	// set position relative to animation ending state (ball)
@@ -761,6 +854,9 @@ public class PlayerHandler : MonoBehaviour
 			ballController.StartBallSlam(true);
 
 		currentController = ballController;
+
+		if (OnHumanToBall != null)
+			OnHumanToBall();
 	}
 
 	void HumanToBallInstant()
@@ -776,6 +872,9 @@ public class PlayerHandler : MonoBehaviour
 		ballController.EnableByHandler(Vector3.zero, true);
 
 		currentController = ballController;
+
+		if (OnHumanToBall != null)
+			OnHumanToBall();
 	}
 
 	void SliderToHuman()

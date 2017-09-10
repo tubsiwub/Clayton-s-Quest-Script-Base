@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class Origami_Collect : MonoBehaviour
 {
+	ObjInfo objInfo;
+
 	[SerializeField] Vector3 holdOffset;
 	[SerializeField] GameObject particleSys;
 	[SerializeField] Renderer rend;
@@ -15,7 +17,18 @@ public class Origami_Collect : MonoBehaviour
 	Transform player = null;
 	bool held = false;
 
-	const float moveToHandSpeed = 10;
+	const float MoveToHandSpeed = 10;
+	const float MaxDist = 10;
+
+	void Awake()
+	{
+		objInfo = GetComponent<ObjInfo>();
+	}
+
+	void Start()
+	{
+		objInfo.LOAD();
+	}
 
 	void Update()
 	{
@@ -39,12 +52,13 @@ public class Origami_Collect : MonoBehaviour
 	void OnTriggerEnter(Collider col)
 	{
 		if (collected) return;
+		if (Vector3.Distance(transform.position, col.transform.position) > MaxDist) return;
 
 		if (col.gameObject.tag == "Player")
 		{
 			PlayerHandler playerHandler = col.gameObject.GetComponent<PlayerHandler>();
 
-			if (!playerHandler.HasOrigami)
+			if (!playerHandler.HasOrigami && !playerHandler.IsFrozen && !playerHandler.AboutToFallDie)
 			{
 				playerHandler.SetOrigamiAnimation(this);
 				collected = true;
@@ -69,7 +83,7 @@ public class Origami_Collect : MonoBehaviour
 	{
 		Transform startPoint = transform;
 		float dist = Vector3.Distance(transform.position, GetHoldPos());
-		float duration = dist / moveToHandSpeed;
+		float duration = dist / MoveToHandSpeed;
 		float t = 0;
 
 		while (Vector3.Distance(transform.position, GetHoldPos()) > 0.01f)
@@ -111,6 +125,10 @@ public class Origami_Collect : MonoBehaviour
 		}
 
 		rend.material.color = new Color(col.r, col.g, col.b, 0);
+
+		objInfo.SAVE(true, false);
+		SavingLoading.instance.SaveData();
+
 		Destroy(gameObject);
 	}
 }

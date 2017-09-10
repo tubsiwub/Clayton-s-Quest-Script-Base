@@ -31,9 +31,13 @@ public class LoadBuddyDoor : MonoBehaviour
 	string[] reloadScenes;
 	string lastActiveScene;
 	bool activeOnLoad = false;
+
 	public bool ActiveOnLoad { get { return activeOnLoad; } }
+	public string GetLastActiveScene { get { return lastActiveScene; } }
 
 	int reloaded = 0;
+	int doneTransitionStamp = 0;
+	bool loadHubOnCompletion = false;
 
 	void Awake()
 	{
@@ -43,6 +47,7 @@ public class LoadBuddyDoor : MonoBehaviour
 	void Start()
 	{
 		LevelManager.instance.DoneLoading += DoneLoading;
+		ScreenTransition.OnDoneForward += DoneTransition;
 	}
 
 	public void Init(Vector3 respawnPos)
@@ -85,11 +90,30 @@ public class LoadBuddyDoor : MonoBehaviour
 		reloaded = data.reloaded;
 	}
 
-	public void Load()
+	public void Load(bool loadHubOnCompletion = false)
 	{
+		GameObject.FindWithTag("Player").GetComponent<PlayerHandler>().SetFrozen(true, true);
+
+		this.loadHubOnCompletion = loadHubOnCompletion;
+		Camera.main.GetComponent<ScreenTransition>().Forward(2, "circle_pattern");
+		StartCoroutine("ReallyLoadAfterTransition");
+	}
+
+	void DoneTransition()
+	{
+		doneTransitionStamp = Time.frameCount;
+	}
+
+	IEnumerator ReallyLoadAfterTransition()
+	{
+		while (doneTransitionStamp != Time.frameCount)
+		{
+			yield return null;
+		}
+
 		activeOnLoad = true;
 
-		SceneManager.LoadSceneAsync(reloadScenes[0], LoadSceneMode.Single);		// load SINGLE to unload last scene (ball door)
+		SceneManager.LoadSceneAsync(reloadScenes[0], LoadSceneMode.Single);     // load SINGLE to unload last scene (ball door)
 
 		for (int i = 1; i < reloadScenes.Length; i++)
 			SceneManager.LoadSceneAsync(reloadScenes[i], LoadSceneMode.Additive);
@@ -112,7 +136,14 @@ public class LoadBuddyDoor : MonoBehaviour
 			reloaded++;
 			if (reloaded >= reloadScenes.Length)
 			{
+				SavingLoading.instance.LoadCheckpoint();
+
+				if (loadHubOnCompletion)
+					LevelManager.instance.LoadHub();
+
 				activeOnLoad = false;
+				loadHubOnCompletion = false;
+				
 				Destroy(gameObject);
 			}
 		}

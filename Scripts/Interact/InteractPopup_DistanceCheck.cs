@@ -24,6 +24,7 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 	GameObject playerObj;
 
 	PlayerHolder playerHolder;
+	PlayerHandler playerHandler;
 
 	bool showingButtonHintText = false;
 	ButtonHintText buttonHintText;
@@ -37,7 +38,7 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 	public int DialogueCounter{get{ return dialogueCounter; }set{ dialogueCounter = value;}}
 
 	Transform parentWithComponent;	// questNPC of this popup
-	Texture questNone, questDone, questStart;
+	Material questNone, questDone, questStart;
 
 	bool 
 	animate,
@@ -46,9 +47,13 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 	// This prevents other NPCs from turning off the dialogue boxes.
 	bool targetedByPlayer = false;
 
+	[SerializeField]
+	Renderer rend;
+
 	void Awake () {
 
 		playerHolder = GameObject.FindWithTag ("Player").GetComponentInChildren<PlayerHolder> ();
+		playerHandler = GameObject.FindWithTag ("Player").GetComponentInChildren<PlayerHandler> ();
 
 		dialoguePopup = GameObject.Find ("DialogueCanvas/DialoguePanel/DialogueBG").GetComponent<Dialogue_Popup> ();
 
@@ -66,9 +71,8 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 		parentWithComponent = MathFunctions.FindParentWithComponent (this.transform, "NPC_QuestContainer");
 
 		// Quest pop-up status
-		questNone = Resources.Load<Texture> ("npcSpeech");
-		questDone = Resources.Load<Texture> ("npcSpeechQuestDone");
-		questStart = Resources.Load<Texture> ("npcSpeechQuestStart");
+
+		SetDialoguePopupTexture ("none");
 
 		ResetStoredDialogue ();
 	}
@@ -79,6 +83,61 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 
 	}
 
+	public void SetDialoguePopupTexture(string type)
+	{
+		StartCoroutine (SetMaterialType (type));
+	}
+
+	IEnumerator SetMaterialType(string type)
+	{
+		while (!GetComponent<InteractPopup_DistanceCheck> ())
+		{
+			print ("can't find InteractPopup_DistanceCheck");
+			yield return new WaitForEndOfFrame ();
+		}
+		if (type == "none") 
+		{
+			if (!GetComponent<MeshRenderer> ())
+			{
+				rend = this.gameObject.AddComponent (typeof(MeshRenderer)) as MeshRenderer;
+			}
+			if (rend == null)
+			{
+				rend = GetComponent<MeshRenderer> ();
+				rend.enabled = true;
+			}
+			questNone = Resources.Load<Material> ("npcSpeech");
+			rend.material = questNone;
+		}
+		if (type == "start") 
+		{
+			if (!GetComponent<MeshRenderer> ())
+			{
+				rend = this.gameObject.AddComponent (typeof(MeshRenderer)) as MeshRenderer;
+			}
+			if (rend == null)
+			{
+				rend = GetComponent<MeshRenderer> ();
+				rend.enabled = true;
+			}
+			questStart = Resources.Load<Material> ("npcSpeechQuestStart");
+			rend.material = questStart;
+		}
+		if (type == "done") 
+		{
+			if (!GetComponent<MeshRenderer> ())
+			{
+				rend = this.gameObject.AddComponent (typeof(MeshRenderer)) as MeshRenderer;
+			}
+			if (rend == null)
+			{
+				rend = GetComponent<MeshRenderer> ();
+				rend.enabled = true;
+			}
+			questDone = Resources.Load<Material> ("npcSpeechQuestDone");
+			rend.material = questDone;
+		}
+	}
 
 	// When the dialogue changes, reset it here
 	public void ResetStoredDialogue(){
@@ -125,13 +184,21 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 
 		if (enable) {
 
-			parentObj.GetComponent<NPC_Behavior> ().ChangeDialogueStatus (true);
-			parentObj.GetComponent<NPC_Behavior> ().currentBehavior = BEHAVIORS.TALK;
+			if (parentObj.GetComponent<NPC_Behavior> ()) {
+				parentObj.GetComponent<NPC_Behavior> ().ChangeDialogueStatus (true);
+				parentObj.GetComponent<NPC_Behavior> ().currentBehavior = BEHAVIORS.TALK;
+			}
 
+			if (!playerHandler.IsJumpFrozen)
+				playerHandler.SetFreezeJump (true);
 
 		} else {
 
-			parentObj.GetComponent<NPC_Behavior> ().ChangeDialogueStatus (false);
+			if(parentObj.GetComponent<NPC_Behavior> ())
+				parentObj.GetComponent<NPC_Behavior> ().ChangeDialogueStatus (false);
+			
+			// Andrew was here
+			//playerHandler.SetFreezeJump (false);
 
 		}
 
@@ -142,23 +209,7 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 		// Stop the NPC from performing movement or actions
 		FREEZE (NPC_FREEZE);
 
-		// Change popUp based on quest status
-		if (parentWithComponent != this.transform && parentWithComponent.GetComponent<NPC_QuestContainer> ()) {
-			if (parentWithComponent.GetComponent<NPC_QuestContainer> ().QuestStatus == QUEST_STATUS.NEUTRAL) {
-				GetComponent<Renderer> ().material.mainTexture = questDone;
-			} else if (parentWithComponent.GetComponent<NPC_QuestContainer> ().QuestStatus == QUEST_STATUS.STARTED) {
-				GetComponent<Renderer> ().material.mainTexture = questDone;
-			} else if (parentWithComponent.GetComponent<NPC_QuestContainer> ().QuestStatus == QUEST_STATUS.FINISHED) {
-				GetComponent<Renderer> ().material.mainTexture = questStart;
-			} else {
-				GetComponent<Renderer> ().material.mainTexture = questNone;
-			}
-		}
-		else 
-		{
-			GetComponent<Renderer> ().material.mainTexture = questNone;
-		}
-
+	
 		if(parentWithComponent.GetComponent<NPC_QuestContainer> ())
 		if (!animate && parentWithComponent.GetComponent<NPC_QuestContainer> ().QuestStatus == QUEST_STATUS.FINISHED) {
 			GetComponent<Animator> ().Play ("InteractPopup_appear");
@@ -167,7 +218,7 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 			animate = true;
 		}
 
-		if (Vector3.Distance (transform.position, playerObj.transform.position) < 3 && playerObj.transform.position.y < this.transform.position.y
+		if (Vector3.Distance (transform.position, playerObj.transform.position) < 4 && playerObj.transform.position.y < this.transform.position.y
 			&& !playerHolder.IsHolding && !playerHolder.HasObjectsNearby) {
 
 			if (!animate && !dialoguePopup.GetLockStatus ()) {
@@ -222,7 +273,7 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 
 		if (dialoguePopup.GetLockStatus () && dialoguePopup.GetLockTarget () == this.gameObject) {
 			
-			if (Vector3.Distance (transform.position, playerObj.transform.position) >= 3) {
+			if (Vector3.Distance (transform.position, playerObj.transform.position) >= 4) {
 
 				dialoguePopup.LockDialogue (false);
 				ResetDialogue ();
@@ -232,71 +283,69 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 		}
 
 		// While you're close to the NPC...
-		if (Vector3.Distance (transform.position, playerObj.transform.position) < 3) {
-
+		if (Vector3.Distance (transform.position, playerObj.transform.position) < 4) 
+		{
 			if ((!dialoguePopup.GetComponent<Animator> ().GetCurrentAnimatorStateInfo (0).IsTag ("painting"))// this is a mess, but it prevents the dialogue from 
-			    && !dialoguePopup.GetComponent<Animator> ().GetCurrentAnimatorStateInfo (0).IsTag ("done")) {
-				if (!showingButtonHintText) {
-
+			    && !dialoguePopup.GetComponent<Animator> ().GetCurrentAnimatorStateInfo (0).IsTag ("done")) 
+			{
+				if (!showingButtonHintText) 
+				{
 					buttonHintText.ShowNPCText ();
 					showingButtonHintText = true;
-
 				}
-			} else {
-				if (showingButtonHintText) {
-
+			} 
+			else 
+			{
+				if (showingButtonHintText) 
+				{
 					buttonHintText.CancelNPCText();
 					showingButtonHintText = false;
-
 				}
 			}
-
 
 			// is this npc the one closest?  is the list of NPCs filled?
-			if (dialoguePopup.GetLockStatus ()) {
-
-				if (dialoguePopup.GetLockTarget () == this.gameObject)
+			if (!dialoguePopup.GetLockStatus ())  
+			{
+				if (dialoguePopup.GetNearestNPC () == this.gameObject) 
+				{	
 					DialogueActions ();
-
-			} else {
-				if (dialoguePopup.GetNearestNPC () == this.gameObject) {	
-
-					DialogueActions ();
-
-				} else {
-
-					if (dialoguePopup.GetLockTarget () != this.gameObject) {
+				} 
+				else 
+				{
+					if (dialoguePopup.GetLockTarget () != this.gameObject) 
+					{
 						GetComponent<MeshRenderer> ().enabled = false;
-
 					}
-
-					if (!dialoguePopup.GetLockStatus ()) {
-						
-						ResetDialogue ();
-					}
+ 
+					ResetDialogue ();
 				}
 			}
-		} else {
 
-			if (showingButtonHintText) {
-
+			if (dialoguePopup.GetLockTarget () == this.gameObject)
+				DialogueActions ();
+		} 
+		else
+		{
+			if (showingButtonHintText) 
+			{
 				buttonHintText.CancelNPCText();
 				showingButtonHintText = false;
-
 			}
 
+			if (!dialoguePopup.GetLockStatus ())  
+				dialoguePopup.GetComponent<Animator> ().ResetTrigger ("Appear");
 		}
 
-		if (Input.GetButtonDown ("Cancel")) {
-
+		if (Input.GetButtonDown ("Cancel")) 
+		{
 			FinishDialogue ();
 		}
 
 	}
 
 	// Clears dialogue for this NPC and the main Dialogue Canvas
-	void FinishDialogue(){
-
+	void FinishDialogue()
+	{
 		dialoguePopup.LockDialogue (false);
 
 		dialoguePopup.TurnOffTextbox ();
@@ -304,6 +353,8 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 		ResetDialogue ();
 		dialoguePopup.ResetDialogue ();
 
+		if (playerHandler.IsJumpFrozen)
+			playerHandler.SetFreezeJump (false);
 	}
 
 	void DialogueActions(){
@@ -318,43 +369,65 @@ public class InteractPopup_DistanceCheck : MonoBehaviour {
 		}
 
 		// INTERACT KEY - Debug: E
-		if (Input.GetButtonDown ("Interact") && !playerHolder.IsHolding && !playerHolder.HasObjectsNearby) 
+		if (NPC_FREEZE)
 		{
-			if((!dialoguePopup.GetComponent<Animator> ().GetCurrentAnimatorStateInfo(0).IsTag("painting") && NPC_FREEZE) // this is a mess, but it prevents the dialogue from 
-				|| !dialoguePopup.GetComponent<Animator> ().GetCurrentAnimatorStateInfo(0).IsTag("done")) 				 //		printing during the background animation
-			if (dialoguePopup.GetLockTarget () == this.gameObject || dialoguePopup.GetLockTarget () == null) {	// make sure another NPC isn't the lock target
+			if ((Input.GetButtonDown ("Interact") || Input.GetButtonDown (PlayerHandler.JumpString)) && !playerHolder.IsHolding && !playerHolder.HasObjectsNearby)
+			{
+				ProcessDialogue ();
+			}
+		} else
+		{
+			if ((Input.GetButtonDown ("Interact")) && !playerHolder.IsHolding && !playerHolder.HasObjectsNearby)
+			{
+				ProcessDialogue ();
+			}
+		}
+	}
 
-				NPC_FREEZE = true;
+	void ProcessDialogue()
+	{
+		if((!dialoguePopup.GetComponent<Animator> ().GetCurrentAnimatorStateInfo(0).IsTag("painting") && NPC_FREEZE) // this is a mess, but it prevents the dialogue from 
+			|| !dialoguePopup.GetComponent<Animator> ().GetCurrentAnimatorStateInfo(0).IsTag("done")) 				 //		printing during the background animation
+		if (dialoguePopup.GetLockTarget () == this.gameObject || dialoguePopup.GetLockTarget () == null) 	// make sure another NPC isn't the lock target
+		{
+			NPC_FREEZE = true;
+
+			if(parentObj.GetComponent<NPC_Behavior> ())
 				parentObj.GetComponent<NPC_Behavior> ().SetTarget (playerObj.transform);
 
-				// ...this causes the popup to jitter slightly.  Not an issue...
-				Camera.main.GetComponent<CameraControlDeluxe> ().SetLookTarget (this.transform.position, 444 * Time.deltaTime);
+			// ...this causes the popup to jitter slightly.  Not an issue...
+			Camera.main.GetComponent<CameraControlDeluxe> ().SetLookTarget (this.transform.position, 444 * Time.deltaTime);
 
-				if (!dialoguePopup.GetLockStatus ()) {
-					dialoguePopup.LockDialogue (true);
-					dialoguePopup.SetLockTarget (this.gameObject);
-				}
+			if (!dialoguePopup.GetLockStatus ()) 
+			{
+				dialoguePopup.LockDialogue (true);
+				dialoguePopup.SetLockTarget (this.gameObject);
+			}
 
-				// If the dialogue has finished being typed out - else, hitting 'E' does nothing
-				if (dialoguePopup.DialogueFinished) {
+			// If the dialogue has finished being typed out - else, hitting 'E' does nothing
+			if (dialoguePopup.DialogueFinished) 
+			{
+				// If we still have dialogue to get through
+				if (dialogueCounter < storedDialogue.Count) 
+				{
+					string npcName;
+					if (parentObj.GetComponent<NPC_Behavior> ())
+						npcName = parentObj.GetComponent<NPC_Behavior> ().NPCName;
+					else
+						npcName = this.NPCName;
 
-					// If we still have dialogue to get through
-					if (dialogueCounter < storedDialogue.Count) {	
+					dialoguePopup.DialogueBoxAnimation (240, storedDialogue [dialogueCounter], dialogueCounter + 1, storedDialogue.Count, npcName);
+					dialogueCounter++;
 
-						string npcName = parentObj.GetComponent<NPC_Behavior> ().NPCName;
+				} 
+				else 
+				{
+					// FIRE EVENT
+					if (OnDialogueFinish != null)
+						OnDialogueFinish ();
 
-						dialoguePopup.DialogueBoxAnimation (240, storedDialogue [dialogueCounter], dialogueCounter + 1, storedDialogue.Count, npcName);
-						dialogueCounter++;
+					FinishDialogue ();
 
-					} else {
-
-						// FIRE EVENT
-						if (OnDialogueFinish != null)
-							OnDialogueFinish ();
-
-						FinishDialogue ();
-
-					}
 				}
 			}
 		}

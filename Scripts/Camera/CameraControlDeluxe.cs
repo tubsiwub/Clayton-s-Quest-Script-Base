@@ -7,6 +7,9 @@ public class CameraControlDeluxe : MonoBehaviour
 {
 	[DllImport("user32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall)]
 	public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint cButtons, uint dwExtraInfo);
+	[DllImport("user32.dll")]
+	public static extern bool SetCursorPos(int X, int Y);
+
 	//Mouse actions
 	private const int MOUSEEVENTF_LEFTDOWN = 0x02;
 	private const int MOUSEEVENTF_LEFTUP = 0x04;
@@ -16,7 +19,7 @@ public class CameraControlDeluxe : MonoBehaviour
 	float distanceAway = 5;
 	float distanceUp = 2;
 	float distanceFrom = 4;
-	float scrollSpeed = 6;
+	const float ScrollSpeed = 6;
 
 	const float xSpeed = 60;
 	const float ySpeed = 5;
@@ -36,6 +39,8 @@ public class CameraControlDeluxe : MonoBehaviour
 
 	Vector3 lastPlayerPos;
 	Vector3 lookTarget = Vector3.zero;
+	Transform cameraSetPoint;
+	bool HasCameraSetPoint { get { return cameraSetPoint != null; } }
 	bool HasLookTarget { get { return lookTarget != Vector3.zero; } }
 	IEnumerator lookRoutineRef;
 
@@ -55,6 +60,9 @@ public class CameraControlDeluxe : MonoBehaviour
 	static int cursorLockFrame = 0;
 	public static int CursorLockFrame { get { return cursorLockFrame; } }
 
+	public delegate void CamFinish();
+	public event CamFinish OnBehindPlayer;
+
 	bool camFrozen = false;
 	public void SetFreeze(bool set, bool setCursor = true)
 	{
@@ -63,16 +71,30 @@ public class CameraControlDeluxe : MonoBehaviour
 		if (setCursor)
 		{
 			if (!set)
-				ForceCursorLock();	// only force lock (click) when we are UNFREEZING the camera
+				ForceCursorLock();  // only force lock (click) when we are UNFREEZING the camera
 
 			SetCursorLock();
 		}
 	}
 
-	public static void ForceCursorLock()
+	public void ForceCursorLock()
 	{
+		if (Application.isEditor)
+		{
+			if (!CursorOnScreen()) return;
+		}
+		else
+			SetCursorPos(Screen.width/2, Screen.height/2);
+
 		cursorLockFrame = Time.frameCount;
+		Cursor.lockState = CursorLockMode.Locked;
 		mouse_event(MOUSEEVENTF_LEFTUP | MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+	}
+
+	bool CursorOnScreen()
+	{
+		return (Input.mousePosition.x > 0 && Input.mousePosition.x < Screen.width &&
+			Input.mousePosition.y > 0 && Input.mousePosition.y < Screen.height);
 	}
 
 	void Awake()
@@ -120,9 +142,6 @@ public class CameraControlDeluxe : MonoBehaviour
 		if (camFrozen && Cursor.lockState == CursorLockMode.Locked)
 			Cursor.lockState = CursorLockMode.None;
 
-		if (Input.GetKeyDown(KeyCode.Slash))
-			SetFreeze(!camFrozen);
-
 		Cursor.visible = Cursor.lockState != CursorLockMode.Locked;
 	}
 
@@ -131,7 +150,7 @@ public class CameraControlDeluxe : MonoBehaviour
 		Event scrollEvent = Event.current;
 
 		if (scrollEvent.type == EventType.ScrollWheel)
-			distanceFrom += scrollEvent.delta.y / scrollSpeed;
+			distanceFrom += scrollEvent.delta.y / ScrollSpeed;
 
 		distanceFrom = Mathf.Clamp(distanceFrom, -2, 4);
 	}
@@ -140,6 +159,12 @@ public class CameraControlDeluxe : MonoBehaviour
 	{
 		if (camFrozen || Cursor.lockState != CursorLockMode.Locked || Time.deltaTime > MAX_SLOW_TIME || !PlayerHandler.CanUpdate)
 		{
+			if (HasCameraSetPoint)
+			{
+				SetToDirectPos();
+				return;
+			}
+
 			follow.rotation = Quaternion.Euler(0, lastFollowRot.eulerAngles.y, 0);
 			return;  // only move camera when cursor is focused
 		}
@@ -161,11 +186,24 @@ public class CameraControlDeluxe : MonoBehaviour
 
 		Vector3 targetPosition = FindTargetPosition(characterOffset, setCamBehindPlayer);
 
-		transform.position = WallStuff(characterOffset, targetPosition);
-		transform.LookAt(characterOffset);
+		if (!HasCameraSetPoint)
+		{
+			transform.position = WallStuff(characterOffset, targetPosition);
+			transform.LookAt(characterOffset);
 
+			lastFollowRot = follow.rotation;
+			lastPlayerPos = floorGetter.PlayerFloor; lastPlayerPos.y = 0;
+		}
+		else SetToDirectPos();
+	}
+
+	void SetToDirectPos()
+	{
+		follow.localRotation = Quaternion.identity;
 		lastFollowRot = follow.rotation;
-		lastPlayerPos = floorGetter.PlayerFloor; lastPlayerPos.y = 0;
+
+		transform.position = cameraSetPoint.position;
+		transform.rotation = cameraSetPoint.rotation;
 	}
 
 	Vector3 FindTargetPosition(Vector3 characterOffset, bool camBehindPlayer)
@@ -180,10 +218,10 @@ public class CameraControlDeluxe : MonoBehaviour
 				curLookDir = rotateMesh.forward - Vector3.up;
 			else
 			{
-				Vector3 dir = ballController.GetVelocity(); dir.y = 0;
+				Vector3 dir = ballController.Distance; dir.y = 0;
 
-				if (dir.magnitude > 0.5f)
-					curLookDir = dir.normalized - Vector3.up;
+				if (dir.normalized.magnitude >= 0.75f)
+					curLookDir = dir - Vector3.up;
 			}
 		}
 
@@ -208,8 +246,9 @@ public class CameraControlDeluxe : MonoBehaviour
 
 	public void CancelLookTarget()
 	{
-		if(lookRoutineRef != null)
+		if (lookRoutineRef != null)
 			StopCoroutine(lookRoutineRef);
+
 		lookTarget = Vector3.zero;
 	}
 
@@ -243,10 +282,26 @@ public class CameraControlDeluxe : MonoBehaviour
 	{
 		setCamBehindPlayer = true;
 		distanceUp = 2;
-		for (int i = 0; i < 5; i++)	// it takes like, 5 frames or whatever to make it behind the player
+		distanceAway = 5;
+		distanceFrom = 4;
+
+		for (int i = 0; i < 8; i++)	// it takes like, 8 frames or whatever to make it behind the player
 			yield return null;
 
 		setCamBehindPlayer = false;
+
+		if (OnBehindPlayer != null)
+			OnBehindPlayer();
+	}
+
+	public void SetPointDirect(Transform point)
+	{
+		cameraSetPoint = point;
+	}
+
+	public void CancelPointDirect()
+	{
+		cameraSetPoint = null;
 	}
 
 	float GetAutoRotateAmount()

@@ -4,23 +4,23 @@ using UnityEngine;
 
 public class HeroAnimationEvents : MonoBehaviour
 {
-	Animator humanAnimator;
-	PlayerHandler playerHandler;
-	PlayerHolder playerHolder;
+	private Animator humanAnimator;
+	private PlayerHandler playerHandler;
+	private PlayerHolder playerHolder;
 
-	void OnEnable()
+	protected void OnEnable()
 	{
 		humanAnimator = GetComponent<Animator>();
 		playerHandler = GetComponentInParent<PlayerHandler>();
 		playerHolder = GetComponentInParent<PlayerHolder>();
 	}
 
-	public void ToBall()
+	public virtual void ToBall()
 	{
 		playerHandler.ToBallAnimComplete();
 	}
 
-	public void ToHuman()
+	public virtual void ToHuman()
 	{
 		playerHandler.ToHumanAnimComplete();
 	}
@@ -54,7 +54,7 @@ public class HeroAnimationEvents : MonoBehaviour
 		StartCoroutine("DisableRopeLayer");
 	}
 
-	IEnumerator DisableRopeLayer()
+	private IEnumerator DisableRopeLayer()
 	{
 		while (humanAnimator.GetLayerWeight(1) > 0)
 		{

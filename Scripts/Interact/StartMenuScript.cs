@@ -15,24 +15,31 @@ public class StartMenuScript : MonoBehaviour
 	public GameObject soundSelected;
 	public GameObject videoSelected;
 	public GameObject gameplaySelected;
+	public GameObject optionsSelected;
 	public GameObject mainMenu;
 	public GameObject soundMenu;
 	public GameObject videoMenu;
-	//public GameObject gameplayMenu;
+	public GameObject optionsMenu;
+	public GameObject gameplayMenu;
+	public GameObject titleMenu;
+	public GameObject controllerTitle;
+	public GameObject noControllerTitle;
 
 	public Slider[] volumeSliders;
 
-	public Toggle[] resolutionToggles;
+	//public Toggle[] resolutionToggles;
 	public Toggle[] aliasToggles;
 	public Toggle vSyncToggle;
 	public Toggle muteMusic;
 	public Toggle muteSfx;
 	public Toggle fullScreenToggle;
+	public Button loadGameButton;
 
 	public Dropdown resolutionDropdown;
 
 	public Text musicPercentText;
 	public Text soundPercentText;
+	public Text sensitivityPercentText;
 
 	public int[] screenWidths;
 	public int[] screenHeights;
@@ -46,6 +53,8 @@ public class StartMenuScript : MonoBehaviour
 	float currentSFXVolume;
 	float musicPercent;
 	float soundPercent;
+	float currentSensitivity;
+	float sensitivityPercent;
 
 	bool vLook = false;
 	bool hLook = false;
@@ -62,19 +71,15 @@ private void Awake()
 
 	void Start()
 	{
-		mainMenu.SetActive(true);
+		titleMenu.SetActive(true);
+		mainMenu.SetActive(false);
 		soundMenu.SetActive(false);
 		videoMenu.SetActive(false);
+		gameplayMenu.SetActive(false);
 
 		cam.GetComponent<CameraControlDeluxe>().SetFreeze(true);
 
 		mManager = GameObject.Find("In-Game Menus(Clone)");
-
-		if (hasController)
-		{
-			Cursor.lockState = CursorLockMode.Locked;
-			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
-		}
 
 		if (Screen.fullScreen)
 		{
@@ -87,11 +92,6 @@ private void Awake()
 			fullScreenToggle.isOn = false;
 			mManager.GetComponent<MenuManager>().fullScreenToggle.isOn = false;
 		}
-
-		//if (fullScreenToggle.isOn == true)
-		//	Screen.fullScreen = true;
-		//else if (fullScreenToggle.isOn == false)
-		//	Screen.fullScreen = false;
 
 
 		//loading player prefs stuff
@@ -145,24 +145,30 @@ private void Awake()
 		{
 			SoundManager.instance.SetMusicMute(true);
 			mManager.GetComponent<MenuManager>().musicIsMute = true;
+			volumeSliders[0].interactable = false;
+			volumeSliders[0].value = 0;
 		}
 
 		else
 		{
 			SoundManager.instance.SetMusicMute(false);
 			mManager.GetComponent<MenuManager>().musicIsMute = false;
+			volumeSliders[0].interactable = true;
 		}
 
 		if (muteSfx.isOn)
 		{
 			SoundManager.instance.SetSfxMute(true);
 			mManager.GetComponent<MenuManager>().soundIsMute = true;
+			volumeSliders[1].interactable = false;
+			volumeSliders[1].value = 0;
 		}
 
 		else
 		{
 			SoundManager.instance.SetSfxMute(false);
 			mManager.GetComponent<MenuManager>().soundIsMute = true;
+			volumeSliders[1].interactable = true;
 		}
 	}
 
@@ -184,17 +190,110 @@ private void Awake()
 		{
 			MenuBack();
 		}
+
+		if (Time.frameCount % 120 == 0)
+			CheckController();
+
+		if (hasController)
+		{
+			Cursor.lockState = CursorLockMode.Locked;
+		}
+
+		else
+		{
+			Cursor.lockState = CursorLockMode.None;
+		}
+
+		if (titleMenu.activeSelf)
+		{
+			if (hasController)
+			{
+				controllerTitle.SetActive(true);
+				noControllerTitle.SetActive(false);
+
+				if (Input.GetButtonDown("Start") || Input.GetButtonDown("AttackPrimary") || Input.GetButtonDown("Submit") || 
+						Input.GetButtonDown("Interact") || Input.GetButtonDown("Cancel"))
+				{
+					MainMenu();
+				}
+			}
+
+			else
+			{
+				controllerTitle.SetActive(false);
+				noControllerTitle.SetActive(true);
+
+				if (Input.GetButtonDown("Start") || Input.GetButtonDown("AttackPrimary") || Input.GetButtonDown("Submit") || 
+					Input.GetButtonDown("Interact") || Input.GetButtonDown("Cancel"))
+				{
+					MainMenu();
+				}
+			}
+		}
+	}
+
+	public void MainMenu()
+	{
+		titleMenu.SetActive(false);
+		mainMenu.SetActive(true);
+
+		if (hasController)
+			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
 	}
 
 	//Main Menu
 	public void StartGame()
 	{
+		SavingLoading.instance.ResetAllData();
+
+		SoundManager.instance.PlayClip("CQMenuSelect", 1);
+		Camera.main.GetComponent<ScreenTransition>().Forward(1.5f, "simple_pattern");
+
+		ScreenTransition.OnDoneForward += OnStartTransitionFinish;
+	}
+
+	public void OnStartTransitionFinish()
+	{
+		ScreenTransition.OnDoneForward -= OnStartTransitionFinish;
+
 		SceneManager.LoadScene(1);
 	}
 
 	public void LoadGame()
 	{
+		loadGameButton.interactable = false;
+		Camera.main.GetComponent<ScreenTransition>().Forward(1.5f, "simple_pattern");
+
+		ScreenTransition.OnDoneForward += OnLoadTransitionFinish;
+	}
+
+	public void OnLoadTransitionFinish()
+	{
+		ScreenTransition.OnDoneForward -= OnLoadTransitionFinish;
+
 		SavingLoading.instance.LoadAllData();
+	}
+
+	public void OptionsMenu()
+	{
+		SoundManager.instance.PlayClip("CQMenuSelect", 1);
+
+		mainMenu.SetActive(false);
+		optionsMenu.SetActive(true);
+
+		if (hasController)
+			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(optionsSelected);
+	}
+
+	public void OptionsReturn()
+	{
+		SoundManager.instance.PlayClip("CQMenuDeselect", 1);
+
+		mainMenu.SetActive(true);
+		optionsMenu.SetActive(false);
+
+		if (hasController)
+			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
 	}
 
 	public void Quit()
@@ -205,10 +304,14 @@ private void Awake()
 	//Sound Menu
 	public void SoundMenu()
 	{
-		mainMenu.SetActive(false);
+		SoundManager.instance.PlayClip("CQMenuSelect", 1);
+
+		optionsMenu.SetActive(false);
 		soundMenu.SetActive(true);
 		videoMenu.SetActive(false);
-		GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(soundSelected);
+
+		if(hasController)
+			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(soundSelected);
 
 		//Get Current sfx %
 		currentSFXVolume = SoundManager.instance.GetSfxVolume;
@@ -256,6 +359,9 @@ private void Awake()
 			mManager.GetComponent<MenuManager>().musicOn.SetActive(false);
 			mManager.GetComponent<MenuManager>().musicOn.SetActive(true);
 
+			volumeSliders[0].interactable = false;
+			volumeSliders[0].value = 0;
+
 			PlayerPrefs.SetInt("music muted", 1);
 			PlayerPrefs.Save();
 		}
@@ -268,6 +374,8 @@ private void Awake()
 
 			mManager.GetComponent<MenuManager>().musicOn.SetActive(true);
 			mManager.GetComponent<MenuManager>().musicOn.SetActive(false);
+
+			volumeSliders[0].interactable = true;
 
 			PlayerPrefs.SetInt("music muted", 0);
 			PlayerPrefs.Save();
@@ -285,6 +393,9 @@ private void Awake()
 			mManager.GetComponent<MenuManager>().sfxOn.SetActive(false);
 			mManager.GetComponent<MenuManager>().sfxOn.SetActive(true);
 
+			volumeSliders[1].interactable = false;
+			volumeSliders[1].value = 0;
+
 			PlayerPrefs.SetInt("sfx muted", 1);
 			PlayerPrefs.Save();
 		}
@@ -297,6 +408,8 @@ private void Awake()
 			mManager.GetComponent<MenuManager>().sfxOn.SetActive(true);
 			mManager.GetComponent<MenuManager>().sfxOn.SetActive(false);
 
+			volumeSliders[1].interactable = true;
+
 			PlayerPrefs.SetInt("sfx muted", 0);
 			PlayerPrefs.Save();
 		}
@@ -304,19 +417,27 @@ private void Awake()
 
 	public void SoundReturn()
 	{
-		mainMenu.SetActive(true);
+		SoundManager.instance.PlayClip("CQMenuDeselect", 1);
+
+		optionsMenu.SetActive(true);
 		soundMenu.SetActive(false);
 		videoMenu.SetActive(false);
-		GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
+
+		if(hasController)
+			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(optionsSelected);
 	}
 
 	//Video Menu
 	public void VideoMenu()
 	{
-		mainMenu.SetActive(false);
+		SoundManager.instance.PlayClip("CQMenuSelect", 1);
+
+		optionsMenu.SetActive(false);
 		soundMenu.SetActive(false);
 		videoMenu.SetActive(true);
-		GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(videoSelected);
+
+		if(hasController)
+			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(videoSelected);
 	}
 
 	public void SetScreenResolution(int i)
@@ -343,10 +464,10 @@ private void Awake()
 
 	public void SetFullScreen(bool isFullscreen)
 	{
-		for (int i = 0; i < resolutionToggles.Length; i++)
-		{
-			resolutionToggles[i].interactable = !isFullscreen;
-		}
+	//	for (int i = 0; i < resolutionToggles.Length; i++)
+	//	{
+	//		resolutionToggles[i].interactable = !isFullscreen;
+	//	}
 
 		if (isFullscreen)
 		{
@@ -368,10 +489,14 @@ private void Awake()
 
 	public void VideoReturn()
 	{
-		mainMenu.SetActive(true);
+		SoundManager.instance.PlayClip("CQMenuDeselect", 1);
+
+		optionsMenu.SetActive(true);
 		soundMenu.SetActive(false);
 		videoMenu.SetActive(false);
-		GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
+
+		if(hasController)
+			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(optionsSelected);
 	}
 
 	public void SetAntialiasing(int i)
@@ -434,34 +559,42 @@ private void Awake()
 	////gameplay menu stuff
 	public void GamePlayMenu()
 	{
-		mainMenu.SetActive(false);
+		SoundManager.instance.PlayClip("CQMenuSelect", 1);
+		optionsMenu.SetActive(false);
 		soundMenu.SetActive(false);
 		videoMenu.SetActive(false);
-		//gameplayMenu.SetActive(true);
-		GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(gameplaySelected);
+		gameplayMenu.SetActive(true);
+
+		if(hasController)
+			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(gameplaySelected);
 	}
 
 	public void GamePlayReturn()
 	{
-		mainMenu.SetActive(false);
+		SoundManager.instance.PlayClip("CQMenuDeselect", 1);
+
+		optionsMenu.SetActive(true);
 		soundMenu.SetActive(false);
 		videoMenu.SetActive(false);
-		//gameplayMenu.SetActive(false);
-		GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
+		gameplayMenu.SetActive(false);
+
+		if(hasController)
+			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(optionsSelected);
 	}
 
 	public void InvertY()
 	{
 		if (!vLook)
 		{
-
 			mManager.GetComponent<MenuManager>().vLook = true;
+			mManager.GetComponent<MenuManager>().invertYToggle.isOn = true;
 			vLook = true;
 		}
 
 		else
 		{
 			mManager.GetComponent<MenuManager>().vLook = false;
+			mManager.GetComponent<MenuManager>().invertYToggle.isOn = false;
 			vLook = false;
 		}
 
@@ -473,12 +606,14 @@ private void Awake()
 		{
 
 			mManager.GetComponent<MenuManager>().hLook = true;
+			mManager.GetComponent<MenuManager>().invertXToggle.isOn = true;
 			hLook = true;
 		}
 
 		else
 		{
 			mManager.GetComponent<MenuManager>().hLook = false;
+			mManager.GetComponent<MenuManager>().invertXToggle.isOn = false;
 			hLook = false;
 		}
 	}
@@ -488,12 +623,16 @@ private void Awake()
 		if (!cRotate)
 		{
 			mManager.GetComponent<MenuManager>().cRotate = true;
+			mManager.GetComponent<MenuManager>().cameraRotateToggle.isOn = true;
+
 			cRotate = true;
 		}
 
 		else
 		{
 			mManager.GetComponent<MenuManager>().cRotate = false;
+			mManager.GetComponent<MenuManager>().cameraRotateToggle.isOn = false;
+
 			cRotate = false;
 		}
 	}
@@ -501,24 +640,41 @@ private void Awake()
 	public void Rumble(bool isRumble)
 	{
 		if (isRumble)
+		{
 			PlayerHandler.AllowVibration = true;
-
+			mManager.GetComponent<MenuManager>().rumbleToggle.isOn = true;
+		}
 		else
+		{
 			PlayerHandler.AllowVibration = false;
+			mManager.GetComponent<MenuManager>().rumbleToggle.isOn = false;
+		}
 	}
 
 	public void ClicktoJump(bool isJump)
 	{
 		if (isJump)
+		{
 			PlayerHandler.SetClickToJump(true);
+			mManager.GetComponent<MenuManager>().clickyJumpToggle.isOn = true;
+		}
 
 		else
+		{
 			PlayerHandler.SetClickToJump(false);
+			mManager.GetComponent<MenuManager>().clickyJumpToggle.isOn = false;
+		}
 	}
 
 	public void SetSensetivity(float value)
 	{
+		currentSensitivity = value;
+
+		sensitivityPercent = (currentSensitivity * 100);
+		sensitivityPercentText.text = sensitivityPercent.ToString("F0") + "%";
+
 		mManager.GetComponent<MenuManager>().cameraSpeed = value;
+		mManager.GetComponent<MenuManager>().cameraSensitivitySlider.value = value;
 
 		mManager.GetComponent<MenuManager>().currentSensitivity = value;
 
@@ -528,26 +684,49 @@ private void Awake()
 
 	private void MenuBack()
 	{
-		if (soundMenu.activeSelf)
+		if (optionsMenu.activeSelf)
 		{
+			SoundManager.instance.PlayClip("CQMenuDeselect", 1);
+
 			mainMenu.SetActive(true);
+			optionsMenu.SetActive(false);
+
+			if (hasController)
+				GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
+		}
+
+		else if (soundMenu.activeSelf)
+		{
+			SoundManager.instance.PlayClip("CQMenuDeselect", 1);
+
+			optionsMenu.SetActive(true);
 			soundMenu.SetActive(false);
-			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
+
+			if(hasController)
+				GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(optionsSelected);
 		}
 
 		else if (videoMenu.activeSelf)
 		{
-			mainMenu.SetActive(true);
+			SoundManager.instance.PlayClip("CQMenuDeselect", 1);
+
+			optionsMenu.SetActive(true);
 			videoMenu.SetActive(false);
-			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
+
+			if(hasController)
+				GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(optionsSelected);
 		}
 
-		//else if (gameplayMenu.activeSelf)
-		//{
-		//	mainMenu.SetActive(true);
-		//	gameplayMenu.SetActive(false);
-		//	GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
-		//}
+		else if (gameplayMenu.activeSelf)
+		{
+			SoundManager.instance.PlayClip("CQMenuDeselect", 1);
+
+			optionsMenu.SetActive(true);
+			gameplayMenu.SetActive(false);
+
+			if(hasController)
+				GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(optionsSelected);
+		}
 	}
 
 	void CheckController()

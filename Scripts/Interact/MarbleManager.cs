@@ -21,15 +21,16 @@ public class MarbleManager : MonoBehaviour
 			Destroy(gameObject);
 
 		DontDestroyOnLoad(gameObject);
-		SceneManager.sceneLoaded += SceneLoaded;
 
-		SavingLoading.instance.LoadMarbles();
+		SceneManager.sceneLoaded += SceneLoaded;
 	}
 
 	void SceneLoaded(Scene scene, LoadSceneMode mode)
 	{
-		if (GameObject.Find("MarbleUI"))
+		if (scene.buildIndex != 0 && GameObject.Find("MarbleUI"))
 		{
+			SavingLoading.instance.LoadMarbles();
+
 			popupText = GameObject.Find("MarbleUI").GetComponent<PopupText>();
 
 			popupText.HideText();
@@ -44,6 +45,8 @@ public class MarbleManager : MonoBehaviour
 
 	public void GetMarble()
 	{
+		SoundManager.instance.PlayClip("MarbleCollected");
+
 		collected++;
 		SavingLoading.instance.SaveMarbles(collected);
 
@@ -60,7 +63,17 @@ public class MarbleManager : MonoBehaviour
 		SavingLoading.instance.SaveMarbles(collected);
 
 		popupText.SetText("x " + collected, false);
-		popupText.PopUpPopDown();
+	}
+
+	public void RemoveMarble(int amount)
+	{
+		collected -= amount;
+		if (collected < 0)
+			collected = 0;
+
+		SavingLoading.instance.SaveMarbles(collected);
+
+		popupText.SetText("x " + collected, false);
 	}
 
 	public void ShowText()

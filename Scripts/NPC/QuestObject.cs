@@ -35,10 +35,10 @@ public class QuestObject : MonoBehaviour {
 	public event QuestObject_TurnIn OnQuestObject;						// - fire when turned in
 
 	public delegate void QuestObject_EnemyDefeat();
-	public static event QuestObject_EnemyDefeat OnQuestEnemyDefeat;		// fire when killed
+	public event QuestObject_EnemyDefeat OnQuestEnemyDefeat;		// fire when killed
 
 	public delegate void QuestObject_BossDefeat();
-	public static event QuestObject_BossDefeat OnQuestBossDefeat;		// fire when killed
+	public event QuestObject_BossDefeat OnQuestBossDefeat;		// fire when killed
 
 	public GameObject objectWithMaterial;
 

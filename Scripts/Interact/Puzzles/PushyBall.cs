@@ -14,6 +14,7 @@ public class PushyBall : MonoBehaviour {
 	Rigidbody rb;
 	Animator humanAnim;
 	PlayerAttack playerAttack;
+	PlayerHolder playerHolder;
 	Transform rotateMesh;
 
 	// have some leniance so the player can leave ball trigger while still pushing for a bit
@@ -25,12 +26,17 @@ public class PushyBall : MonoBehaviour {
 
 	void Start () {
 
-		rightHand = GameObject.FindWithTag ("Player").GetComponent<PlayerAttack> ().RightHand;
-		leftHand = GameObject.FindWithTag ("Player").GetComponent<PlayerAttack> ().LeftHand;
-		playerAttack = GameObject.FindWithTag ("Player").GetComponent<PlayerAttack> ();
+		gameObject.AddComponent<NoNudge>();
+
+		GameObject player = GameObject.FindWithTag("Player");
+
+		playerAttack = player.GetComponent<PlayerAttack>();
+		rightHand = playerAttack.RightHand;
+		leftHand = playerAttack.LeftHand;
 		rb = GetComponent<Rigidbody>();
-		humanAnim = GameObject.FindWithTag("Player").GetComponent<PlayerHandler>().HumanAnimator;
-		rotateMesh = GameObject.FindWithTag("Player").GetComponent<PlayerHandler>().RotateMesh;
+		humanAnim = player.GetComponent<PlayerHandler>().HumanAnimator;
+		rotateMesh = player.GetComponent<PlayerHandler>().RotateMesh;
+		playerHolder = player.GetComponentInChildren<PlayerHolder>();
 	}
 
 	void Update () {
@@ -73,6 +79,9 @@ public class PushyBall : MonoBehaviour {
 
 	void OnTriggerEnter(Collider col) {
 
+		if (playerHolder.IsHolding)
+			return;
+
 		if (col.gameObject == rightHand || col.gameObject == leftHand) {
 
 			StartCoroutine (PunchBall (0.25f, col));
@@ -83,6 +92,9 @@ public class PushyBall : MonoBehaviour {
 
 	void OnTriggerStay(Collider col){
 
+		if (playerHolder.IsHolding)
+			return;
+
 		if (col.transform.tag == "Player") {
 
 			Vector3 direction = this.transform.position - col.transform.position;
@@ -90,7 +102,7 @@ public class PushyBall : MonoBehaviour {
 			direction.y = 0;
 			rb.AddForce (direction * PushForce, ForceMode.Force);
 
-			if (humanAnim.isInitialized && playerAttack.IsAttacking == false && isFacingThisFrame)
+			if (humanAnim.isInitialized && !playerAttack.IsAttacking && isFacingThisFrame)
 			{
 				// make sure we don't do animation while standing on top of ball
 				bool belowBall = col.transform.position.y < transform.position.y;

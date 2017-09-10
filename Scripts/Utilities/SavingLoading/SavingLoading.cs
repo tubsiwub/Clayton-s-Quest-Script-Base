@@ -16,23 +16,32 @@ using UnityEngine.SceneManagement;
 [Serializable]
 public class SavingLoading : MonoBehaviour
 {
-	// ========EXPAND=======
-	// WE NEED A DIFFERENT, ACTUAL WAY OF STARTING A NEW GAME INSTEAD OF THIS
-	// =====================
 	[Tooltip("Check this if you want to wipe all game save data every time the game starts")]
 	[SerializeField] bool newGame = true; // permanent new game mode for now.
 
 	string SAVE_PATH { get { return Application.persistentDataPath + "/jam.root"; } }
+
+	// we're going to use this for the main menu, to change the UI options accordingly
+	public bool HasSaveFile { get { return Deserialize<SaveContainer>(SAVE_PATH).exists; } }
+
+	// we may have already created the save file, but it could be essentially "blank." make sure it's not.
+	bool SaveFileValid { get { return sc.marblesCollected >= 1 || sc.savedCheckpoint != ""; } }
 
 	[Serializable]
 	class SaveContainer
 	{
 		public SaveContainer()
 		{
+			npcSaved = new List<string>();
+
 			storageKeyDictionary = new Dictionary<string, StorageKey>();
 			storedObjectDictionary = new Dictionary<string, StoredObject>();
 			questStatusDataDictionary = new Dictionary<string, QuestStatusData>();
+			storedCandyDictionary = new Dictionary<string, StoredCandy>();
+			origami = OrigamiManager.SetupOrigamiDictionary();
 		}
+
+		public bool exists = false;		// imma use this to see if we have a save file or not
 
 		public Dictionary<string, StoredObject> storedObjectDictionary;
 
@@ -40,6 +49,10 @@ public class SavingLoading : MonoBehaviour
 		public Dictionary<string, StorageKey> storageKeyDictionary;
 
 		public Dictionary<string, QuestStatusData> questStatusDataDictionary;
+
+		public Dictionary<string, StoredCandy> storedCandyDictionary;
+
+		public List<string> npcSaved;
 
 		public List<string> savedScenes;
 		public LoadBuddyDoorData buddyDoorData;
@@ -50,6 +63,11 @@ public class SavingLoading : MonoBehaviour
 		public int candyCollectedMountain = 0;
 
 		public int lives = HealthManager.totalLives;
+
+		public Dictionary<OrigamiManager.OrigamiType, bool> origami;
+		public string playerTexture = "";
+		public string playerHat = "";
+		public string ballModel = "";
 	}
 	SaveContainer sc;
 
@@ -87,9 +105,6 @@ public class SavingLoading : MonoBehaviour
 		public float worldScaleY;
 		public float worldScaleZ;
 
-		//public Color objectColor;
-		//public Material objectMaterial;
-
 		public bool exists;
 	}
 
@@ -98,6 +113,17 @@ public class SavingLoading : MonoBehaviour
 	{
 		public QUEST_STATUS containerStatus;
 		public QUEST_STATUS typeStatus;
+	}
+
+	[Serializable]
+	public struct StoredCandy
+	{
+		public string name;
+		public float positionX;
+		public float positionY;
+		public float positionZ;
+		public bool collected;
+		public int sceneIndex;
 	}
 
 	public StoredObject nullObject;
@@ -117,19 +143,21 @@ public class SavingLoading : MonoBehaviour
 		nullObject.objectRefID = "NULL";    // Don't name your scene objects this...
 		nullObject.objectRef = "NULL";
 
-		GameObject loader = GameObject.Find("Loader");
-		if (loader != null)
-			newGame = loader.GetComponent<Loader>().NewGame;
+		// only ever reset/load game data if we're not on the start scene
+		// if we're on the start scene, we'll even ignore the newGame toggle because yolo
+		if (SceneManager.GetActiveScene().buildIndex != 0)
+		{
+			GameObject loader = GameObject.Find("Loader");
+			if (loader != null)
+				newGame = loader.GetComponent<Loader>().NewGame;
 
-		// if new game, reset all data
-		if (newGame)
-			ResetAllData();
+			// if new game, reset all data
+			if (newGame)
+				ResetAllData();
 
-		// Bring in data relating to game progress
-		LoadAllData();
-
-		if (sc.storageKeyDictionary.ContainsKey("tutorialzonecomplete"))
-			print("Status: " + sc.storageKeyDictionary["tutorialzonecomplete"].keyCheck);
+			// Bring in data relating to game progress
+			LoadAllData();
+		}
 
 		DontDestroyOnLoad(gameObject);
 		SceneManager.sceneLoaded += (scene, loadingMode) => { SceneLoaded(); };
@@ -159,21 +187,23 @@ public class SavingLoading : MonoBehaviour
 					if (!GameObject.Find(sc.storedObjectDictionary[obj.Key].objectRefID))
 					{
 
-						GameObject newObj = Instantiate<GameObject>(Resources.Load<GameObject>(sc.storedObjectDictionary[obj.Key].objectRef));
+						if (sc.storedObjectDictionary [obj.Key].objectRef != null) {
+							GameObject newObj = Instantiate<GameObject> (Resources.Load<GameObject> (sc.storedObjectDictionary [obj.Key].objectRef));
 
-						newObj.name = sc.storedObjectDictionary[obj.Key].objectRefID;
-						newObj.transform.position = new Vector3(
-							sc.storedObjectDictionary[obj.Key].worldPositionX,
-							sc.storedObjectDictionary[obj.Key].worldPositionY,
-							sc.storedObjectDictionary[obj.Key].worldPositionZ);
-						newObj.transform.rotation = Quaternion.Euler(new Vector3(
-							sc.storedObjectDictionary[obj.Key].worldRotationX,
-							sc.storedObjectDictionary[obj.Key].worldRotationY,
-							sc.storedObjectDictionary[obj.Key].worldRotationZ));
-						newObj.transform.localScale = new Vector3(
-							sc.storedObjectDictionary[obj.Key].worldScaleX,
-							sc.storedObjectDictionary[obj.Key].worldScaleY,
-							sc.storedObjectDictionary[obj.Key].worldScaleZ);
+							newObj.name = sc.storedObjectDictionary [obj.Key].objectRefID;
+							newObj.transform.position = new Vector3 (
+								sc.storedObjectDictionary [obj.Key].worldPositionX,
+								sc.storedObjectDictionary [obj.Key].worldPositionY,
+								sc.storedObjectDictionary [obj.Key].worldPositionZ);
+							newObj.transform.rotation = Quaternion.Euler (new Vector3 (
+								sc.storedObjectDictionary [obj.Key].worldRotationX,
+								sc.storedObjectDictionary [obj.Key].worldRotationY,
+								sc.storedObjectDictionary [obj.Key].worldRotationZ));
+							newObj.transform.localScale = new Vector3 (
+								sc.storedObjectDictionary [obj.Key].worldScaleX,
+								sc.storedObjectDictionary [obj.Key].worldScaleY,
+								sc.storedObjectDictionary [obj.Key].worldScaleZ);
+						}
 
 					}
 				}
@@ -318,9 +348,6 @@ public class SavingLoading : MonoBehaviour
 	{
 		elapsedTime += Time.deltaTime;
 
-		if (Input.GetKeyDown(KeyCode.C) && Input.GetKey(KeyCode.LeftShift))
-			ResetAllData();
-
 		CHEATS();
 	}
 
@@ -398,11 +425,19 @@ public class SavingLoading : MonoBehaviour
 
 	public void SaveData()
 	{
+		// never save anything while we're on the start scene
+		if (SceneManager.GetActiveScene().buildIndex == 0)
+			return;
+
+		if (SaveFileValid)
+			sc.exists = true;
+
 		Serialize(SAVE_PATH, sc);
 
 		//print("Data Saved");
 	}
 
+	// to-do: this needs to call all/most of the save functions, so we can save ALL of this on application quit
 	public void SaveAllData()
 	{
 		SaveSceneInfo();
@@ -412,14 +447,13 @@ public class SavingLoading : MonoBehaviour
 
 	public void LoadAllData()
 	{
+		sc = Deserialize<SaveContainer>(SAVE_PATH);
+
 		LoadStoredObjectData();
 		LoadStorageKeyData();
 		LoadSceneInfo();
 		LoadCheckpoint();
-		LoadMarbles();
-		LoadLives();
 
-		//print("Data Loaded");
 	}
 
 	public void LoadStoredObjectData()
@@ -454,7 +488,11 @@ public class SavingLoading : MonoBehaviour
 
 		if (!hasSceneBase)
 		{
-			LoadBuddyDoorData obj = GameObject.Find("LoadBuddyDoor").GetComponent<LoadBuddyDoor>().GetData();
+			GameObject door = GameObject.Find("LoadBuddyDoor");
+			LoadBuddyDoorData obj = null;
+
+			if (door != null)
+				obj = door.GetComponent<LoadBuddyDoor>().GetData();
 
 			if (obj != null)
 			{
@@ -528,6 +566,34 @@ public class SavingLoading : MonoBehaviour
 		}
 	}
 
+	public void SaveNPC(string name)
+	{
+		sc.npcSaved.Add (name);
+	}
+
+	public int LoadNPC_String(string name)
+	{
+		if (sc.npcSaved.Contains (name)) 
+		{
+			return sc.npcSaved.IndexOf (name);
+		}
+		return -1;
+	}
+
+	public string LoadNPC_Index(int index)
+	{
+		if (sc.npcSaved[index] != null) 
+		{
+			return sc.npcSaved [index];
+		}
+		return "";
+	}
+
+	public int GetNPCCount()
+	{
+		return sc.npcSaved.Count;
+	}
+
 	public void SaveCheckpoint()
 	{
 		Checkpoint checkpoint = GameObject.Find("Player").GetComponent<PlayerHandler>().LastCheckpoint;
@@ -561,12 +627,168 @@ public class SavingLoading : MonoBehaviour
 		}
 	}
 
+	public void SaveOrigami(Dictionary<OrigamiManager.OrigamiType, bool> origami)
+	{
+		sc.origami = origami;
+	}
+
+	public void LoadOrigami()
+	{
+		if (OrigamiManager.instance)
+		{
+			Dictionary<OrigamiManager.OrigamiType, bool> origami = Deserialize<SaveContainer>(SAVE_PATH).origami;
+			OrigamiManager.instance.SetOrigamiDirect(origami);
+		}
+	}
+
+	public void SavePlayerTexture(string textureName)
+	{
+		sc.playerTexture = textureName;
+	}
+
+	public void LoadPlayerTexture()
+	{
+		GameObject player = GameObject.FindWithTag("Player");
+		if (player != null)
+		{
+			string texture = Deserialize<SaveContainer>(SAVE_PATH).playerTexture;
+
+			if (texture != "")
+				player.GetComponent<PlayerCustomizer>().ChangeTexture(texture);
+		}
+	}
+
+	public void SavePlayerHat(string hatName)
+	{
+		sc.playerHat = hatName;
+	}
+
+	public void LoadPlayerHat()
+	{
+		GameObject player = GameObject.FindWithTag("Player");
+		if (player != null)
+		{
+			string hatName = Deserialize<SaveContainer>(SAVE_PATH).playerHat;
+		
+			if (hatName != "")
+				player.GetComponent<PlayerCustomizer>().ChangeHat(hatName);
+		}
+	}
+
+	public void SaveBallModel(string ballModel)
+	{
+		sc.ballModel = ballModel;
+	}
+
+	public void LoadBallModel()
+	{
+		GameObject player = GameObject.FindWithTag("Player");
+		if (player != null)
+		{
+			string ballModel = Deserialize<SaveContainer>(SAVE_PATH).ballModel;
+
+			if (ballModel != "")
+				player.GetComponent<PlayerCustomizer>().ChangeBallModel(ballModel);
+		}
+	}
+
+	// Total / Amount / Number - not individual
 	public void SaveCandy(int collected)
 	{
 		if (SceneManager.GetActiveScene().name == "Pickup Zone")
 			sc.candyCollectedPickup = collected;
 		else if (SceneManager.GetActiveScene().name == "Mountain Zone")
 			sc.candyCollectedMountain = collected;
+	}
+
+	public void SaveStoredCandy(GameObject candyObject, bool collectValue)
+	{
+		if (!sc.storedCandyDictionary.ContainsKey (candyObject.name)) 
+		{
+			StoredCandy newCandy = new StoredCandy ();
+
+			newCandy.collected = collectValue;
+			newCandy.name = candyObject.name;
+			newCandy.positionX = candyObject.transform.position.x;
+			newCandy.positionY = candyObject.transform.position.y;
+			newCandy.positionZ = candyObject.transform.position.z;
+			newCandy.sceneIndex = SceneManager.GetActiveScene ().buildIndex;
+
+			sc.storedCandyDictionary.Add (candyObject.name, newCandy);
+
+			//print ("Saving candy new.");
+		} 
+		else 
+		{
+			StoredCandy newCandy = new StoredCandy ();
+
+			newCandy = sc.storedCandyDictionary [candyObject.name];
+			newCandy.collected = collectValue;
+			sc.storedCandyDictionary [candyObject.name] = newCandy;
+
+			//print ("Saving candy override.");
+		}
+
+	}
+
+	public bool LoadStoredCandy(string candyName){
+
+		if (sc.storedCandyDictionary.ContainsKey (candyName)) 
+		{
+			if (!sc.storedCandyDictionary [candyName].collected) 
+			{
+				if (sc.storedCandyDictionary [candyName].sceneIndex == SceneManager.GetActiveScene ().buildIndex) {
+
+//					GameObject newCandy = Instantiate(Resources.Load<GameObject> ("Candy"));
+//					newCandy.GetComponent<ObjInfo> ().assignRandomName = false;
+//					newCandy.name = sc.storedCandyDictionary [candyName].name;
+//					newCandy.transform.position = new Vector3 (
+//						sc.storedCandyDictionary [candyName].positionX, 
+//						sc.storedCandyDictionary [candyName].positionY, 
+//						sc.storedCandyDictionary [candyName].positionZ);
+//
+//					newCandy.transform.SetParent (GameObject.Find ("CandyContainer").transform);
+
+					//print ("Loaded a saved candy");
+
+					return true;
+				} 
+				else 
+				{
+					//print ("Wrong scene ID.");
+				}
+			} 
+			else 
+			{
+				//print ("Loaded candy has been collected.");
+
+				// We do not load a candy when returning
+				return false;
+			}
+		} 
+		else 
+		{
+			//print ("Couldn't find candy name.");
+		}
+
+		return true;
+	}
+
+	public void ResetStoredCandy(int sceneIndex)
+	{
+		//print ("Reset Candy was called.");
+
+		List<string> dicKeys = new List<string> (sc.storedCandyDictionary.Keys);
+
+		foreach(string storedCandyKey in dicKeys)
+		{
+			if (sc.storedCandyDictionary[storedCandyKey].sceneIndex == sceneIndex) 
+			{
+				StoredCandy newCandy = sc.storedCandyDictionary[storedCandyKey];
+				newCandy.collected = false;
+				sc.storedCandyDictionary[storedCandyKey] = newCandy;
+			}
+		}
 	}
 
 	public int GetLoadCandy()
@@ -610,6 +832,8 @@ public class SavingLoading : MonoBehaviour
 			sc.questStatusDataDictionary.Remove (storageKey);
 			sc.questStatusDataDictionary.Add (storageKey, qsd);
 		}
+
+		SaveAllData ();
 	}
 
 	public QUEST_STATUS LoadQuestStatus_Container(string storageKey)
@@ -634,12 +858,6 @@ public class SavingLoading : MonoBehaviour
 		{
 			return QUEST_STATUS.NEUTRAL;
 		}
-	}
-
-	// Easier to type in / read.  Just an alternative.
-	public void NewGame()
-	{
-		ResetAllData();
 	}
 
 	public void ResetAllData()

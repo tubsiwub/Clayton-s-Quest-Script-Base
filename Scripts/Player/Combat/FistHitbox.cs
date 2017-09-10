@@ -4,8 +4,7 @@ using UnityEngine;
 
 public class FistHitbox : MonoBehaviour
 {
-	//int hitFrameStamp = int.MinValue;
-	//public int LastHitFrame { get { return hitFrameStamp; } }
+	[SerializeField] Transform followTransform;
 
 	GameObject powEffect;
 
@@ -14,13 +13,26 @@ public class FistHitbox : MonoBehaviour
 
 	void Start()
 	{
-		powEffect = Resources.Load<GameObject> ("Effect_Pow!");
+		powEffect = Resources.Load<GameObject>("Effect_Pow!");
 	}
 
 	void Update()
 	{
 		// cooldown timer
 		effectCooldown -= Time.deltaTime;
+
+		MoveToHand();
+	}
+
+	void LateUpdate()
+	{
+		MoveToHand();
+	}
+
+	void MoveToHand()
+	{
+		if (followTransform != null)
+			transform.position = followTransform.position;
 	}
 
 	void OnTriggerEnter(Collider other)
@@ -46,8 +58,6 @@ public class FistHitbox : MonoBehaviour
 
 	void HitObject()
 	{
-		//hitFrameStamp = Time.frameCount;
-
 		if (effectCooldown <= 0)
 			SpawnPow();
 	}

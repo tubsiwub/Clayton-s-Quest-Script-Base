@@ -57,7 +57,7 @@ public class HumanRopeController : HumanController
 			playerHandler.SwitchState(PlayerHandler.PlayerState.Human);
 
 			// we have to get this reference the long way, not fully sure why /shrug
-			playerHandler.gameObject.GetComponent<HumanController>().ForceJump(false);
+			playerHandler.gameObject.GetComponent<HumanController>().ForceJump(false, true);
 			lastJumpedFrame = Time.frameCount;
 		}
 	}

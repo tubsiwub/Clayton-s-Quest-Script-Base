@@ -42,6 +42,7 @@ public class DistanceCuller : MonoBehaviour
 
 		AddTagToList("Marble");
 		AddTagToList("Grass");
+		AddTagToList("Flower");
 
 		Cull();
 	}

@@ -30,7 +30,10 @@ public class UnlockableBridge : MonoBehaviour {
 			// If this object relies on a quest, use that instead
 			if (questObject) {
 
-				if (SavingLoading.instance.LoadQuestStatus_Container (storageKey) == QUEST_STATUS.STARTED) {
+				// exclude failed and neutral states
+				if (SavingLoading.instance.LoadQuestStatus_Container (storageKey) == QUEST_STATUS.STARTED || 
+					SavingLoading.instance.LoadQuestStatus_Container (storageKey) == QUEST_STATUS.FINISHED ||
+					SavingLoading.instance.LoadQuestStatus_Container (storageKey) == QUEST_STATUS.COMPLETE) {
 					anim.SetTrigger ("Unlock");
 				}
 

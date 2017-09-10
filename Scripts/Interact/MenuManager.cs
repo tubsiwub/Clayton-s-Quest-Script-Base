@@ -6,6 +6,9 @@ using XInputDotNetPure;
 
 public class MenuManager : MonoBehaviour
 {
+	// Events
+	public delegate void MenuManager_Quit();
+	public event MenuManager_Quit OnQuit;
 
 	public static MenuManager instance = null;
 
@@ -26,6 +29,9 @@ public class MenuManager : MonoBehaviour
 	public GameObject videoSelected;
 	public GameObject cameraSelected;
 	public GameObject quitSelected;
+	public GameObject storeMenu;
+	public Button returnToHubButton;
+
 	//temp mail object
 	public GameObject tempMail;
 	public GameObject tempMailSelected;
@@ -36,6 +42,7 @@ public class MenuManager : MonoBehaviour
 	public GameObject sfxOff;
 
 	public Slider[] volumeSliders;
+	public Slider cameraSensitivitySlider;
 
 	public Toggle[] resolutionToggles;
 	public Toggle[] aliasToggles;
@@ -43,6 +50,11 @@ public class MenuManager : MonoBehaviour
 	public Toggle muteMusic;
 	public Toggle muteSfx;
 	public Toggle fullScreenToggle;
+	public Toggle invertYToggle;
+	public Toggle invertXToggle;
+	public Toggle rumbleToggle;
+	public Toggle clickyJumpToggle;
+	public Toggle cameraRotateToggle;
 
 	public int[] screenWidths;
 	public int[] screenHeights;
@@ -61,7 +73,7 @@ public class MenuManager : MonoBehaviour
 	public float sensitivityPercent;
 	public float cameraSpeed = 1.0f;
 
-	bool menuActive = false;
+	public bool menuActive = false;
 	bool hasController;
 	public bool vLook = false;
 	public bool hLook = false;
@@ -98,6 +110,8 @@ public class MenuManager : MonoBehaviour
 		videoMenu.SetActive(false);
 		cameraMenu.SetActive(false);
 
+		storeMenu = GameObject.Find("Store");
+
 		CheckController();
 	}
 
@@ -118,10 +132,33 @@ public class MenuManager : MonoBehaviour
 			MenuBack();
 		}
 
+		if (Time.frameCount % 120 == 0)
+			CheckController();
+
+		if (mainMenu.activeSelf || optionsMenu.activeSelf || soundMenu.activeSelf ||
+				videoMenu.activeSelf || cameraMenu.activeSelf || quitMenu.activeSelf)
+		{
+			if (hasController)
+				Cursor.lockState = CursorLockMode.Locked;
+			else
+				Cursor.lockState = CursorLockMode.None;
+		}
+
 		if (Screen.fullScreen)
 			resolutionDropdown.interactable = false;
 		else
 			resolutionDropdown.interactable = true;
+
+		if (musicIsMute)
+			mSlider.GetComponent<Slider>().interactable = false;
+		else
+			mSlider.GetComponent<Slider>().interactable = true;
+
+		if (soundIsMute)
+			sfxSlider.GetComponent<Slider>().interactable = false;
+		else
+			sfxSlider.GetComponent<Slider>().interactable = true;
+
 
 		if (vSyncToggle.isOn == true)
 			QualitySettings.vSyncCount = 1;
@@ -156,7 +193,8 @@ public class MenuManager : MonoBehaviour
 	public void ReturnToGame()
 	{
 		PauseMenu();
-		Cursor.lockState = CursorLockMode.Locked;
+
+		//Cursor.lockState = CursorLockMode.Locked;
 	}
 
 	public void OptionsMenu()
@@ -168,6 +206,15 @@ public class MenuManager : MonoBehaviour
 
 		if (hasController)
 			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(optionsSelected);
+	}
+
+	public void ReturnToHub()
+	{
+		SoundManager.instance.PlayClip("CQMenuSelect", 1);
+
+		LevelManager.instance.LoadHub();
+
+		ReturnToGame();
 	}
 
 	public void Quit()
@@ -185,6 +232,13 @@ public class MenuManager : MonoBehaviour
 	public void QuitYes()
 	{
 		SoundManager.instance.PlayClip("meow", 1);
+
+		SavingLoading.instance.SaveAllData ();
+
+		// Let scripts know when quitting;
+		if (OnQuit != null)
+			OnQuit ();
+
 		Application.Quit();
 	}
 
@@ -212,6 +266,7 @@ public class MenuManager : MonoBehaviour
 		if (hasController)
 			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
 	}
+
 	public void SoundMenu()
 	{
 		SoundManager.instance.PlayClip("CQMenuSelect", 1);
@@ -230,6 +285,7 @@ public class MenuManager : MonoBehaviour
 			music.GetComponent<Toggle>().isOn = true;
 			musicOn.SetActive(false);
 			musicOff.SetActive(true);
+			mSlider.GetComponent<Slider>().value = 0;
 		}
 
 		else
@@ -244,6 +300,7 @@ public class MenuManager : MonoBehaviour
 			sfx.GetComponent<Toggle>().isOn = true;
 			sfxOn.SetActive(false);
 			sfxOff.SetActive(true);
+			sfxSlider.GetComponent<Slider>().value = 0;
 		}
 
 		else
@@ -369,6 +426,8 @@ public class MenuManager : MonoBehaviour
 			musicOn.SetActive(false);
 			musicOff.SetActive(true);
 
+			mSlider.GetComponent<Slider>().value = 0;
+
 			PlayerPrefs.SetInt("music muted", 1);
 			PlayerPrefs.Save();
 		}
@@ -399,6 +458,8 @@ public class MenuManager : MonoBehaviour
 
 			sfxOn.SetActive(false);
 			sfxOff.SetActive(true);
+
+			sfxSlider.GetComponent<Slider>().value = 0;
 
 			PlayerPrefs.SetInt("sfx muted", 1);
 			PlayerPrefs.Save();
@@ -654,6 +715,14 @@ public class MenuManager : MonoBehaviour
 	//function for opening menu
 	private void PauseMenu()
 	{
+		// andrew was here
+		// don't let us pause the game before anything happens! (meaning SceneBase is the currently active scene)
+		if (LevelManager.instance.SceneBaseActive)
+		{
+			Camera.main.GetComponent<CameraControlDeluxe>().ForceCursorLock();
+			return;
+		}
+
 		if (menuActive == false)
 		{
 			mainMenu.SetActive(true);
@@ -666,10 +735,12 @@ public class MenuManager : MonoBehaviour
 
 			GameObject.Find("EventSystem").GetComponent<UnityEngine.EventSystems.EventSystem>().SetSelectedGameObject(mainSelected);
 
-			if (hasController)
-			{
-				Cursor.lockState = CursorLockMode.Locked;
-			}
+			returnToHubButton.interactable = LevelManager.instance.CanLoadHub();
+
+			//if (hasController)
+			//{
+			//	Cursor.lockState = CursorLockMode.Locked;
+			//}
 
 			MarbleManager.instance.ShowText();
 			menuActive = true;
@@ -692,15 +763,15 @@ public class MenuManager : MonoBehaviour
 
 	private void MenuBack()
 	{
-		//if (menuActive == true && mainMenu.activeSelf)
-		//{
-		//	mainMenu.SetActive(false);
-		//	GameObject.FindWithTag("MainCamera").GetComponent<CameraControlDeluxe>().SetFreeze(false);
-		//	MarbleManager.instance.HideText();
-		//	menuActive = false;
+		if (menuActive == true && mainMenu.activeSelf)
+		{
+			//mainMenu.SetActive(false);
+			//GameObject.FindWithTag("MainCamera").GetComponent<CameraControlDeluxe>().SetFreeze(false);
+			//MarbleManager.instance.HideText();
+			//menuActive = false;
 
-		//	Time.timeScale = 1;
-		//}
+			//Time.timeScale = 1;
+		}
 
 		if (optionsMenu.activeSelf)
 		{

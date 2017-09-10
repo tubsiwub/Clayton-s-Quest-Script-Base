@@ -9,7 +9,6 @@ public class IconControllerSwapper : MonoBehaviour
 	[SerializeField] GameObject controllerIcon;
 
 	bool hasController = false;
-	bool lastHasCont = true;
 
 	void Start()
 	{
@@ -26,13 +25,8 @@ public class IconControllerSwapper : MonoBehaviour
 	{
 		GetControllerState();
 
-		if (hasController != lastHasCont)
-		{
-			kbIcon.SetActive(!hasController);
-			controllerIcon.SetActive(hasController);
-		}
-
-		lastHasCont = hasController;
+		kbIcon.SetActive(!hasController);
+		controllerIcon.SetActive(hasController);
 	}
 
 	void GetControllerState()

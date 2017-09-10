@@ -24,7 +24,7 @@ public class AnalyticsEventTrigger : MonoBehaviour
 		{
 			if (obj.GetComponent<PlayerHandler>().Ready)
 			{
-				print("Analytics sent " + customEventName + " event.");
+				//print("Analytics sent " + customEventName + " event.");
 				Analytics.CustomEvent(customEventName);
 				sentEvent = true;
 			}

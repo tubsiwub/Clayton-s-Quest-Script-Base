@@ -4,6 +4,12 @@ using UnityEngine;
 
 public class CageExplode : MonoBehaviour
 {
+	//event 
+	public delegate void Cage_Explode();
+	public event Cage_Explode OnCageExplode;
+
+	[SerializeField] string npcName;
+
 	[SerializeField] GameObject startCage;
 	[SerializeField] GameObject brokenCage;
 	[SerializeField] Rigidbody cageCrown;
@@ -20,8 +26,16 @@ public class CageExplode : MonoBehaviour
 	const float piecesVanishTime = 3;
 	bool canAttack = true;
 
-	void Start()
-	{
+	string storageKey = "";
+
+	void Start () {
+
+		// Event Triggers
+		if (GetComponent<SavingLoading_StorageKeyCheck> ()) {
+			GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck += KeyCheck;
+			storageKey = GetComponent<SavingLoading_StorageKeyCheck> ().storageKey;
+		}
+
 		startPos = new Vector3[pieces.Length];
 		startRot = new Quaternion[pieces.Length];
 		player = GameObject.FindWithTag("Player").transform;
@@ -41,9 +55,23 @@ public class CageExplode : MonoBehaviour
 		}
 	}*/
 
+	// If storageKey marks this as completed, perform these actions
+	void KeyCheck(){
+
+		GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
+
+		GetComponent<SavingLoading_StorageKeyCheck> ().enabled = false;
+
+		Destroy (this.gameObject);
+	}
+
 	public void BreakCage()
 	{
 		if (!canAttack) return;
+
+		// event
+		if (OnCageExplode != null)
+			OnCageExplode ();
 
 		for (int i = 0; i < disableObjects.Length; i++)
 			disableObjects[i].SetActive(false);
@@ -58,8 +86,14 @@ public class CageExplode : MonoBehaviour
 			pieces[i].AddForce(direction * pushForce, ForceMode.VelocityChange);
 		}
 
+		// Save NPC name to list of NPCs - order doesn't matter
+		SavingLoading.instance.SaveNPC (npcName);
+		GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
+		GetComponent<SavingLoading_StorageKeyCheck> ().enabled = false;
+		SavingLoading.instance.SaveStorageKey (storageKey, true);
+
 		// Store NPC into list for town - temporary for now
-		NPC_Manager.instance.StoreNPC("Charles" + Time.frameCount);
+		//NPC_Manager.instance.StoreNPC("Charles" + Time.frameCount);
 
 		StartCoroutine("VanishPieces");
 		canAttack = false;

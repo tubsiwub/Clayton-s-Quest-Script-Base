@@ -5,15 +5,14 @@ using System.Collections.Generic;
 using UnityEngine;
 
 
-public enum WINZONE_TYPE {
-
+public enum WINZONE_TYPE 
+{
 	PUZZLE, QUEST, BALLQUEST
-
 }
 
 
-public class WinZone : MonoBehaviour {
-
+public class WinZone : MonoBehaviour 
+{
 	public WINZONE_TYPE winZoneType;
 
 	// Events
@@ -26,7 +25,12 @@ public class WinZone : MonoBehaviour {
 
 	bool puzzleActive = false;
 
+	YouDidItScript youDidIt;
+	public bool questObject = false;
+
 	void Start () {
+		
+		youDidIt = GameObject.Find ("WinZone_TextEffect").GetComponent<YouDidItScript> ();
 
 		// Event Triggers
 		if(GetComponent<SavingLoading_StorageKeyCheck> ())
@@ -34,19 +38,20 @@ public class WinZone : MonoBehaviour {
 
 		timerObj = GameObject.Find ("TimerUI");
 
-		PuzzleOFF ();
-
 	}
 
 	void Update(){
-
+		
 	}
+
+	bool eventSet = false;
 
 	public void PuzzleON(){
 		
 		if (useTimer) {
 			timerObj.GetComponent<ActivatedTimer> ().OnTimerStart += PuzzleON;
 			timerObj.GetComponent<ActivatedTimer> ().OnTimerRunOut += PuzzleOFF;
+			eventSet = true;
 		}
 
 		puzzleActive = true;
@@ -59,7 +64,13 @@ public class WinZone : MonoBehaviour {
 	}
 
 	public void PuzzleOFF(){
-		
+
+		if (useTimer && eventSet) {
+			timerObj.GetComponent<ActivatedTimer> ().OnTimerStart -= PuzzleON;
+			timerObj.GetComponent<ActivatedTimer> ().OnTimerRunOut -= PuzzleOFF;
+			eventSet = false;
+		}
+
 		puzzleActive = false;
 
 		GetComponent<Collider> ().enabled = false;
@@ -77,11 +88,15 @@ public class WinZone : MonoBehaviour {
 		if(winZoneType == WINZONE_TYPE.QUEST || winZoneType == WINZONE_TYPE.PUZZLE)
 		if (col.transform.tag == "Player" && puzzleActive) {
 
+			if (!questObject)
+				youDidIt.PlayAnimation ();
+
 			if (OnWinZoneActivate != null)
 				OnWinZoneActivate ();
 
 			SaveStorageKey ();
 
+			PuzzleOFF ();
 		}
 
 
@@ -93,6 +108,7 @@ public class WinZone : MonoBehaviour {
 
 			SaveStorageKey ();
 
+			PuzzleOFF ();
 		}
 
 	}
@@ -115,6 +131,7 @@ public class WinZone : MonoBehaviour {
 
 	// If storageKey marks this as completed, perform these actions
 	void KeyCheck(){
+		GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
 		GetComponent<SavingLoading_StorageKeyCheck> ().enabled = false;
 		this.gameObject.SetActive (false);
 	}

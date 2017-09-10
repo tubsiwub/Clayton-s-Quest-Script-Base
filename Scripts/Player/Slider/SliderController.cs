@@ -18,7 +18,8 @@ public class SliderController : PlayerController
 	const float initialDownForce = 8;
 	const float initialForwardForce = 5;
 	const float tooSteepAngle = 85;     // above this? consider it a wall, and bounce off
-	const float bumpAgainstWallForce = 4;
+	const float bumpAgainstWallForce = 2;
+	const float pushForwardForce = 4;
 	const float slowdownSpeed = 0.915f;
 
 	const float newRadius = 0.6f;
@@ -67,11 +68,14 @@ public class SliderController : PlayerController
 
 	bool GetFloor()
 	{
+		const float DownSweepDist = 10;
+		const float HorizSweepDist = 0.4f;
+
 		RaycastHit hitInfo;
 		Vector3 lastPos = rb.position;
 		rb.MovePosition(rb.position + Vector3.up * 0.2f);
 
-		if (rb.SweepTest(Vector3.down, out hitInfo, 10, QueryTriggerInteraction.Ignore))
+		if (rb.SweepTest(Vector3.down, out hitInfo, DownSweepDist, QueryTriggerInteraction.Ignore))
 		{
 			rb.MovePosition(lastPos);
 
@@ -93,10 +97,10 @@ public class SliderController : PlayerController
 		}
 		else { rb.MovePosition(lastPos); return false; }
 
-		if (rb.SweepTest(rotateMesh.right, out hitInfo, 0.5f, QueryTriggerInteraction.Ignore))
+		if (rb.SweepTest(rotateMesh.right, out hitInfo, HorizSweepDist, QueryTriggerInteraction.Ignore))
 			CheckBumpWalls(hitInfo);
 
-		if (rb.SweepTest(-rotateMesh.right, out hitInfo, 0.5f, QueryTriggerInteraction.Ignore))
+		if (rb.SweepTest(-rotateMesh.right, out hitInfo, HorizSweepDist, QueryTriggerInteraction.Ignore))
 			CheckBumpWalls(hitInfo);
 
 		return true;
@@ -129,7 +133,7 @@ public class SliderController : PlayerController
 
 	void PushForward(Vector3 direction)
 	{
-		rb.AddForce(direction * bumpAgainstWallForce, ForceMode.VelocityChange);
+		rb.AddForce(direction * pushForwardForce, ForceMode.VelocityChange);
 	}
 
 	bool CheckBumpWalls(RaycastHit hitInfo)

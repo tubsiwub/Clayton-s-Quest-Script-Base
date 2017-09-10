@@ -19,6 +19,8 @@ public class Cutscene_LetterboxScreenFit : MonoBehaviour {
 
 	RectTransform rt;
 
+	YouDidItScript youDidIt;
+
 	GameObject playerObj;
 
 	float shiftSpeed = 4.0f;
@@ -37,6 +39,8 @@ public class Cutscene_LetterboxScreenFit : MonoBehaviour {
 	public bool CutsceneActive { get { return cutsceneActive; } set { cutsceneActive = value; } }
 
 	void Start () {
+		
+		youDidIt = GameObject.Find ("WinZone_TextEffect").GetComponent<YouDidItScript> ();
 
 		if (scriptManager != null) {
 			scriptManager.GetComponent<ScriptStateManager>().OnCutsceneCancel += CancelLetterboxing;
@@ -74,7 +78,8 @@ public class Cutscene_LetterboxScreenFit : MonoBehaviour {
 
 	void Update(){
 
-		if (Input.GetButtonDown ("Abort")) {
+		// Andrew was here
+		if (cutsceneActive && !cancelLetterboxing && Input.GetButtonDown ("Abort")) {
 			CancelLetterboxing ();
 		}
 
@@ -103,6 +108,8 @@ public class Cutscene_LetterboxScreenFit : MonoBehaviour {
 
 		// Add in the letterboxing
 		GetComponent<Image>().color = new Color(0,0,0,1);
+
+		youDidIt.SetCutsceneCheck (true);
 
 		while(Mathf.Abs(Vector3.Distance(rt.anchoredPosition3D, positionOnScreen)) > 0.3f){
 

@@ -8,6 +8,7 @@ using System;
 // NOTE:
 // Remember to make a function for nullifying all data that doesn't relate to current quest.
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public enum QUESTTYPE {
 
@@ -61,7 +62,7 @@ public class NPC_QuestType : MonoBehaviour {
 	public Color npcColor;
 	public string npcName;
 
-
+	QuestObject questObject;
 	public QUESTTYPE questType;
 
 	Sprite questStarted;
@@ -186,41 +187,9 @@ public class NPC_QuestType : MonoBehaviour {
 
 		LoadData ();
 
-		// Event Triggers
-		if (GetComponent<SavingLoading_StorageKeyCheck> ())
-			GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck += KeyCheck;
+		SetEvents (true);
 
-		// init
-		candyUIObj = GameObject.Find ("MainHUDCanvas").transform.GetChild (1);
-		questAlertObj = GameObject.Find ("QuestAlert");
-		questStarted = Resources.Load<Sprite> ("questStart");
-		questComplete = Resources.Load<Sprite> ("questComplete");
-		questHUDTextContainer = questAlertObj.transform.GetChild (0);
-		questHUDText = questHUDTextContainer.GetChild(1).GetComponent<Text> ();
-
-		if (questType == QUESTTYPE.DEFEAT) {
-			
-			QuestObject.OnQuestEnemyDefeat += EnemyDefeat;
-
-		}
-
-		if (questType == QUESTTYPE.BOSS) {
-			
-			QuestObject.OnQuestBossDefeat += BossDefeat;
-
-		}
-
-		if (questType == QUESTTYPE.PLATFORM) {
-			 
-			endPlatformGoal.GetComponent<WinZone> ().OnWinZoneActivate += CompleteQuest;
-
-		}
-
-		if (questType == QUESTTYPE.EXPLORE) {
-
-			endPlatformGoal.GetComponent<WinZone> ().OnWinZoneActivate += CompleteQuest;
-
-		}
+		Init ();
 
 		if (questType == QUESTTYPE.GATHER) {
 
@@ -229,27 +198,133 @@ public class NPC_QuestType : MonoBehaviour {
 			candyContainer.SetActive (true);
 			candyContainer.SetActive (false);
 
-			if(SavingLoading.instance)
-				currentCandyAmount = SavingLoading.instance.GetLoadCandy();
+			List<string> sceneList = new List<string> { "Pickup Zone", "Mountain Zone" };
 
-			totalCandyRequired = numberOfCandyRequired;
-			numberOfCandyRequired -= currentCandyAmount;
+			StartCoroutine (WaitForActiveScene (sceneList));
+		}
 
-			if (currentCandyAmount > 0)
+		if (questType == QUESTTYPE.BALL) 
+		{
+			SpawnBall ();
+		}
+
+	}
+
+	IEnumerator WaitForActiveScene(List<string> sceneList){
+
+		bool check = true;
+
+		while(check)
+		{
+			for (int i = 0; i < sceneList.Count; i++)
 			{
-				candyUIObj.GetComponent<PopupText>().SetText(currentCandyAmount + " / " + totalCandyRequired, true);
-				candyUIObj.GetComponent<PopupText>().DoPopUp();
+				if (SceneManager.GetActiveScene ().name == sceneList [i])
+				{
+					check = false;
+
+					if(SavingLoading.instance)
+						currentCandyAmount = SavingLoading.instance.GetLoadCandy();
+
+					totalCandyRequired = numberOfCandyRequired;
+					numberOfCandyRequired -= currentCandyAmount;
+
+					if (currentCandyAmount > 0)
+					{
+						candyUIObj.GetComponent<PopupText>().SetText(currentCandyAmount + " / " + totalCandyRequired, true);
+						candyUIObj.GetComponent<PopupText>().DoPopUp();
+					}
+				}
 			}
+
+			yield return new WaitForEndOfFrame ();
+		}
+	}
+
+
+	// true for +, false for -
+	void SetEvents(bool status){
+
+		if (status)
+		{
+			if (GetComponent<SavingLoading_StorageKeyCheck> ())
+				GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck += KeyCheck;
+
+			if (questType == QUESTTYPE.DEFEAT)
+			{
+				for (int i = 0; i < specificEnemiesList.Count; i++)
+				{
+					if (specificEnemiesList [i].transform.GetChild(1).GetComponent<QuestObject> () != null)
+						specificEnemiesList [i].transform.GetChild(1).GetComponent<QuestObject> ().OnQuestEnemyDefeat += EnemyDefeat;
+				}
+			}
+
+			if (questType == QUESTTYPE.BOSS)
+			{
+				questObject = bossObject.GetComponent<QuestObject> ();
+				questObject.OnQuestBossDefeat += BossDefeat;
+			}
+
+			if (questType == QUESTTYPE.PLATFORM)
+				endPlatformGoal.GetComponent<WinZone> ().OnWinZoneActivate += CompleteQuest;
+
+			if (questType == QUESTTYPE.EXPLORE)
+				endPlatformGoal.GetComponent<WinZone> ().OnWinZoneActivate += CompleteQuest;
+	
+			if (questType == QUESTTYPE.BALL)
+				endPlatformGoal.GetComponent<WinZone> ().OnWinZoneActivate += CompleteQuest;
+		}
+		else
+		{
+			if (GetComponent<SavingLoading_StorageKeyCheck> ())
+				GetComponent<SavingLoading_StorageKeyCheck> ().OnKeyCheck -= KeyCheck;
+
+			if (questType == QUESTTYPE.DEFEAT)
+			{
+				for (int i = 0; i < specificEnemiesList.Count; i++)
+				{
+					if (specificEnemiesList [i] != null)
+					{
+						if (questObject) {
+							questObject = specificEnemiesList [i].GetComponent<QuestObject> ();
+							questObject.OnQuestEnemyDefeat -= EnemyDefeat;
+						}
+					}
+				}
+			}
+
+			if (questType == QUESTTYPE.BOSS)
+			{
+				questObject = bossObject.GetComponent<QuestObject> ();
+				questObject.gameObject.GetComponent<QuestObject>().OnQuestBossDefeat -= BossDefeat;
+			}
+
+			if (questType == QUESTTYPE.PLATFORM)
+				endPlatformGoal.GetComponent<WinZone> ().OnWinZoneActivate -= CompleteQuest;
+
+			if (questType == QUESTTYPE.EXPLORE)
+				endPlatformGoal.GetComponent<WinZone> ().OnWinZoneActivate -= CompleteQuest;
+
+			if (questType == QUESTTYPE.BALL)
+				endPlatformGoal.GetComponent<WinZone> ().OnWinZoneActivate -= CompleteQuest;
 		}
 
-		if (questType == QUESTTYPE.BALL) {
+	}
 
-			endPlatformGoal.GetComponent<WinZone> ().OnWinZoneActivate += CompleteQuest;
+	void Init(){
+		
+		// init
+		candyUIObj = GameObject.Find ("MainHUDCanvas").transform.GetChild (1);
+		questAlertObj = GameObject.Find ("QuestAlert");
+		questStarted = Resources.Load<Sprite> ("questStart");
+		questComplete = Resources.Load<Sprite> ("questComplete");
+		questHUDTextContainer = questAlertObj.transform.GetChild (0);
+		questHUDText = questHUDTextContainer.GetChild(1).GetComponent<Text> ();
+	}
 
-			startLocationBall = ballObj.transform.position;
-			ballObj.GetComponent<Rigidbody> ().velocity = Vector3.zero;
+	public void SpawnBall(){
 
-		}
+		startLocationBall = ballObj.transform.position;
+		ballObj.GetComponent<Rigidbody> ().velocity = Vector3.zero;
 
 	}
 
@@ -258,10 +333,14 @@ public class NPC_QuestType : MonoBehaviour {
 			candyContainer.SetActive (true);
 	}
 
-	// When quest state changes to Quest Start
-	void OnQuestStart(){
-		if (oldStatus != questStatus && questStatus == QUEST_STATUS.STARTED) {
+	bool showQuestStart = true;
+	public bool ShowQuestStart { set {showQuestStart = value;}}
 
+	// When quest state changes to Quest Start
+	void OnQuestStart()
+	{
+		if (oldStatus != questStatus && questStatus == QUEST_STATUS.STARTED) 
+		{
 			// Using a timer?  Give event to the timer
 			if (useTimer)
 			if (timerObject != null)
@@ -270,11 +349,13 @@ public class NPC_QuestType : MonoBehaviour {
 				timerObject.GetComponent<ActivatedTimer> ().OnTimerRunOut += TimerEnd;
 			}
 
-
-			// Play Quest Complete animation
-			questAlertObj.GetComponent<Image> ().sprite = questStarted;
-			questAlertObj.GetComponent<Animator> ().SetTrigger ("START");
-			questHUDTextContainer.gameObject.SetActive (false);
+			if (showQuestStart)
+			{
+				// Play Quest Complete animation
+				questAlertObj.GetComponent<Image> ().sprite = questStarted;
+				questAlertObj.GetComponent<Animator> ().SetTrigger ("START");
+				questHUDTextContainer.gameObject.SetActive (false);
+			}
 
 			if(questType == QUESTTYPE.BALL){
 
@@ -326,9 +407,6 @@ public class NPC_QuestType : MonoBehaviour {
 
 			if (bossObject)
 				bossObject.GetComponent<QuestObject> ().QuestStatus = questStatus;
-			else
-				CompleteQuest ();
-
 		}
 
 		if (questType == QUESTTYPE.COLLECT && questStatus != QUEST_STATUS.COMPLETE) {
@@ -396,6 +474,10 @@ public class NPC_QuestType : MonoBehaviour {
 
 	}
 
+	public void SetCandyContainerActive(bool status){
+		candyContainer.SetActive (status);
+	}
+
 	// If storageKey marks this as completed, perform these actions
 	void KeyCheck(){
 
@@ -452,6 +534,9 @@ public class NPC_QuestType : MonoBehaviour {
 			numberOfDifferentObjects = 0;
 		}
 
+		if (OnQuestComplete != null)
+			OnQuestComplete ();
+
 		GetComponent<SavingLoading_StorageKeyCheck> ().enabled = false;
 	}
 
@@ -459,6 +544,8 @@ public class NPC_QuestType : MonoBehaviour {
 	public void ResetQuest(){
 
 		timerOn = false;
+
+		SetEvents (false);	// remove all event calls
 
 		if (questType == QUESTTYPE.BOSS) {
 
@@ -488,6 +575,13 @@ public class NPC_QuestType : MonoBehaviour {
 		if (questType == QUESTTYPE.PLATFORM) {
 
 			endPlatformGoal.GetComponent<WinZone> ().PuzzleOFF ();
+		}
+
+		if (questType == QUESTTYPE.GATHER) {
+
+			currentCandyAmount = 0;
+			numberOfCandyRequired = 100;
+			totalCandyRequired = 100;
 		}
 
 	}
@@ -589,10 +683,13 @@ public class NPC_QuestType : MonoBehaviour {
 	public void CompleteQuest(){
 
 		if (questStatus != QUEST_STATUS.COMPLETE) {	// you cannot complete a quest multiple times
+			
 			if (OnQuestComplete != null)
 				OnQuestComplete ();
 
-			questStatus = QUEST_STATUS.COMPLETE;
+			questStatus = QUEST_STATUS.COMPLETE;	// needed
+
+			Init ();
 
 			// Play Quest Complete animation
 			questAlertObj.GetComponent<Image> ().sprite = questComplete;

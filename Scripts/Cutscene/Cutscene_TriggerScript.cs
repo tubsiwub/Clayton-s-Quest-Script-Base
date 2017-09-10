@@ -24,26 +24,51 @@ public class Cutscene_TriggerScript : MonoBehaviour {
 
 	Vector3 origin;
 
-	void Start(){
-
-		timerScript = GameObject.Find ("TimerUI").GetComponent<ActivatedTimer> ();
-		timerScript.OnTimerRunOut += timerRunOut;
+	void Start()
+	{
+		if (activateTimer)
+		{
+			timerScript = GameObject.Find ("TimerUI").GetComponent<ActivatedTimer> ();
+			timerScript.OnTimerRunOut += timerRunOut;
+		}
 
 		origin = transform.position;
-
 	}
 
-	void Update(){
-
+	void Update()
+	{
 		CutsceneTimer ();
+	}
+
+	void timerRunOut()
+	{
+		if (PlayOnce) {
+			gameObject.SetActive (true);
+			StartCoroutine (DestroyAfterTime (0.5f));
+		}
+
+		if (!timerScript.WinState)
+			transform.position = origin;
+		else
+		{
+			if (this.gameObject.activeSelf)
+				StartCoroutine (DestroyAfterTime (0.5f));
+		}
+	}
+
+	void OnDestroy(){
+
+		if(activateTimer)
+			timerScript.OnTimerRunOut -= timerRunOut;
 
 	}
 
-	void timerRunOut(){
-		if(!timerScript.WinState)
-			transform.position = origin;
-		else 
-			Destroy (this.gameObject);
+	IEnumerator DestroyAfterTime(float wait){
+
+		yield return new WaitForSeconds (wait);
+
+		Destroy (this.gameObject);
+
 	}
 
 	void CutsceneTimer(){
@@ -57,7 +82,7 @@ public class Cutscene_TriggerScript : MonoBehaviour {
 
 	void OnTriggerEnter(Collider col){
 
-		if (col.transform.tag == "Player") {
+		if (col.transform.tag == "Player" && HealthManager.instance.Lives > 0) {
 
 			if (activateTimer) {
 				if(!winZone) timerScript.ClaimTimer (checkpoint, TIMERTYPE.TRIGGER, this.gameObject, timerTime, scriptManager);
@@ -76,8 +101,8 @@ public class Cutscene_TriggerScript : MonoBehaviour {
 			}
 
 			// If we use it once then who cares about it?
-			if (PlayOnce)
-				Destroy (this.gameObject);
+			if (PlayOnce && this.gameObject.activeSelf)
+				StartCoroutine (DestroyAfterTime (0.5f));
 		}
 
 	}

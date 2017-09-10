@@ -115,6 +115,9 @@ public class LedgeCheckController : MonoBehaviour
 
 				if (lastHitResult == FeelTouchType.NoHit) // if the last hit was false, and the current one is true
 				{
+					// try again at a lower height, see if we can get more accurate hitInfo and ray
+					newHitResult = CreateFeeler(heights[i] - 0.2f, ref tempHitInfo, ref tempRay);
+
 					ledgeHitInfo = tempHitInfo;
 					hitRay = tempRay;
 
@@ -149,7 +152,7 @@ public class LedgeCheckController : MonoBehaviour
 				hitInfo.collider.gameObject.GetComponent<ForceSlide>())
 				return FeelTouchType.Ignore;
 
-			if (!NearTopOfPlatform(dir, hitInfo.collider) || !NearTopOfPlatform(Quaternion.Euler(0, 35, 0) * dir, hitInfo.collider) || 
+			if (!NearTopOfPlatform(dir, hitInfo.collider) || !NearTopOfPlatform(Quaternion.Euler(0, 35, 0) * dir, hitInfo.collider) ||
 			!NearTopOfPlatform(Quaternion.Euler(0, -35, 0) * dir, hitInfo.collider))
 				return FeelTouchType.Ignore;
 
@@ -187,19 +190,21 @@ public class LedgeCheckController : MonoBehaviour
 
 	void SetOnLedge(RaycastHit hitInfo)
 	{
-		int r = Random.Range(1, 5);
+		int r = Random.Range(1, 3);		// 5);
 		SoundManager.instance.PlayClip("LedgeGrab0" + r);
 
+		bool wasSliding = playerHandler.CurrentState == PlayerHandler.PlayerState.Slider;
+			 
 		playerHandler.SwitchState(PlayerHandler.PlayerState.Human);
 		playerHandler.SetFrozen(true, false);
 		playerHandler.SetSecondaryAction(PlayerHandler.SecondaryAction.OnLedge);    // do this to reset rotate mesh location
-
+		
 		hitInfo = ScanDown(hitInfo);
 
 		Vector3 normal = hitInfo.normal; normal.y = 0;
 		rotateMesh.forward = -normal.normalized;
 
-		Vector3 handsPos = DownRayFromHands(hitInfo.point), newPos;
+		Vector3 handsPos = DownRayFromHands(hitInfo.point, wasSliding), newPos;
 		newPos = handsPos - (rotateMesh.forward * 0.5f);   //move back
 		newPos += Vector3.down * heightOffset;      // move down
 
@@ -227,14 +232,11 @@ public class LedgeCheckController : MonoBehaviour
 
 			if (hit)
 			{
-				if (hitInfo.collider != initialHit.collider)
-				{
-					hitLast = false;
-					continue;
-				}
+				bool differentCollider = hitInfo.collider != initialHit.collider;
+				bool angleTooGreat = CalcAngle(hitInfo.normal) >= 88;
+				bool differentDirection = Vector3.Dot(hitInfo.normal, initialHit.normal) < 0.5f;
 
-				float hitAngle = CalcAngle(hitInfo.normal);
-				if (hitAngle >= 88)
+				if (differentCollider || angleTooGreat || differentDirection)
 				{
 					hitLast = false;
 					continue;
@@ -269,12 +271,12 @@ public class LedgeCheckController : MonoBehaviour
 		onLedge = true;		// don't set this until coroutine is over - this way, we can't leave ledge until this is done
 	}
 
-	Vector3 DownRayFromHands(Vector3 hitPoint)
+	Vector3 DownRayFromHands(Vector3 hitPoint, bool wasSliding)
 	{
 		RaycastHit downRayInfo;
 
 		// position this ray above the hitpoint, and slightly forward from the player, to ensure we reach the platform.
-		Ray downRay = new Ray(hitPoint + Vector3.up + (rotateMesh.forward * 0.2f), Vector3.down);
+		Ray downRay = new Ray(hitPoint + Vector3.up + (hitRay.direction * (wasSliding ? -0.2f : 0.2f)), Vector3.down);
 		Debug.DrawRay(downRay.origin, downRay.direction, Color.red);
 		if (Physics.Raycast(downRay, out downRayInfo, 3, castLayers, QueryTriggerInteraction.Ignore))
 		{
@@ -326,11 +328,8 @@ public class LedgeCheckController : MonoBehaviour
 
 	void LeaveLedge()
 	{
-		if (!Input.GetButton(PlayerHandler.JumpString))
-		{
-			int r = Random.Range(1, 3);
-			SoundManager.instance.PlayClip("LedgeJump0" + r);
-		}
+		int r = 1;  // Random.Range(1, 3);
+		SoundManager.instance.PlayClip("LedgeJump0" + r);
 
 		heldBackFrames = 0;
 		onLedge = false;
@@ -344,7 +343,7 @@ public class LedgeCheckController : MonoBehaviour
 
 		if (Input.GetButton(PlayerHandler.JumpString))
 		{
-			humanController.ForceJump(false);
+			humanController.ForceJump(false, false);
 			playerHandler.HumanAnimator.CrossFade("hero_jump", 0.1f);
 		}
 		else playerHandler.HumanAnimator.CrossFade("hero_fall_transition", 0.1f);

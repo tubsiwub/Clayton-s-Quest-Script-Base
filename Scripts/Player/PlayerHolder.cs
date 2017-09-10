@@ -53,7 +53,7 @@ public class PlayerHolder : MonoBehaviour
 
 	public void SetHolding(Pickupable newObj)
 	{
-		int r = Random.Range(1, 4);
+		int r = 1; //Random.Range(1, 4);
 		SoundManager.instance.PlayClip("PickupGrunt0" + r);
 
 		Vector3 direction = (newObj.transform.position - transform.position);
@@ -200,7 +200,7 @@ public class PlayerHolder : MonoBehaviour
 	{
 		if (IsHolding)
 		{
-			int r = Random.Range(1, 4);
+			int r = 1; //Random.Range(1, 4);
 			SoundManager.instance.PlayClip("PickupGrunt0" + r);
 
 			StopHolding();
@@ -211,7 +211,7 @@ public class PlayerHolder : MonoBehaviour
 
 	void Throw()
 	{
-		int r = Random.Range(1, 4);
+		int r = 1; //Random.Range(1, 4);
 		SoundManager.instance.PlayClip("PickupGrunt0" + r);
 
 		float targetThrowForce = throwForce;

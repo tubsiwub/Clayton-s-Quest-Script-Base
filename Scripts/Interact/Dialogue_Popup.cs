@@ -71,15 +71,18 @@ public class Dialogue_Popup : MonoBehaviour {
 		currentDialogueObj.GetComponent<Text>().text = currentDialogue.ToString();
 		totalDialogueObj.GetComponent<Text>().text = totalDialogue.ToString();
 
-		if (IsNPCListEmpty ()) {
+		if (IsNPCListEmpty ()) 
+		{
 			TurnOffTextbox ();
 			ResetDialogue ();
-		} else {
+		} 
+		else 
+		{
 			resetLock = false;
 		}
 
 		// Instant-fill dialogue box
-		if(Input.GetButtonDown ("Interact") && readStarted){
+		if((Input.GetButtonDown ("Interact") || Input.GetButtonDown(PlayerHandler.JumpString)) && readStarted){
 
 			readStarted = false;
 

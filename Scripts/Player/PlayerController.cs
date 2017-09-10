@@ -31,8 +31,14 @@ public abstract class PlayerController : MonoBehaviour
 	public abstract Vector3 GetVelocity();
 	public abstract void PushAway(Vector3 direction, float force);
 	public virtual void SetFrozen(bool frozen, bool freezeAnimator) { isFrozen = frozen; }
+	public virtual void SetFreezeJump(bool frozen) { jumpFrozen = frozen; }
+	public virtual void SetHorizontalFrozen(bool frozen) { horizontalFrozen = frozen; }
 	protected bool isFrozen = false;
+	private static bool jumpFrozen = false;
+	protected bool horizontalFrozen = false;
 	public bool IsFrozen { get { return isFrozen; } }
+	public bool IsJumpFrozen { get { return jumpFrozen; } }
+	public bool IsHorizontalFrozen { get { return horizontalFrozen; } }
 	public virtual void KillVelocity() { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
 	public void SetDetectCollisions(bool set) { rb.detectCollisions = set; }
 	public virtual void DoHighJump(float noPressHeight, float pressHeight) { }
@@ -96,7 +102,16 @@ public abstract class PlayerController : MonoBehaviour
 	public bool BallCollidingUpward()
 	{
 		RaycastHit hitInfo;
-		float sweepHeight = charController.height - capsuleCollider.height;
-		return (rb.SweepTest(Vector3.up, out hitInfo, sweepHeight, QueryTriggerInteraction.Ignore));
+		const float HeightOffset = 0.2f;
+		float sweepHeight = (charController.height - capsuleCollider.height) + HeightOffset;
+
+		Vector3 lastPos = rb.position;
+		rb.MovePosition(rb.position + (Vector3.down * HeightOffset));
+
+		bool whatever = (rb.SweepTest(Vector3.up, out hitInfo, sweepHeight, QueryTriggerInteraction.Ignore));
+
+		rb.MovePosition(lastPos);
+
+		return whatever;
 	}
 }

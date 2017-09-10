@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using UnityEngine;
@@ -21,7 +22,7 @@ public static class MathFunctions {
 		float seg1 = obj.transform.position.x + obj.transform.position.y + obj.transform.position.z;
 		float seg2 = obj.transform.rotation.x + obj.transform.rotation.y + obj.transform.rotation.z;
 		float seg3 = obj.transform.localScale.x + obj.transform.localScale.y + obj.transform.localScale.z;
-		float final = (((Random.Range(0,500) * (seg1 - seg2)) * (seg3 + seg1)) - seg2/seg1);
+		float final = (((UnityEngine.Random.Range(0,500) * (seg1 - seg2)) * (seg3 + seg1)) - seg2/seg1);
 		final = Mathf.Abs (final) % modulus;	// Keep the value to the range of [modulus]
 		return final;
 	}
@@ -54,12 +55,26 @@ public static class MathFunctions {
 
 	public static string GetStringFromPosition(Vector3 position)
 	{
-		string pos = RoundToZero(position.x).ToString() + RoundToZero(position.y).ToString() + RoundToZero(position.z).ToString();
+		float x = RoundToZero(position.x); x = (float)Math.Round(x, 2);
+		float y = RoundToZero(position.y); y = (float)Math.Round(y, 2);
+		float z = RoundToZero(position.z); z = (float)Math.Round(z, 2);
+
+		string pos = x.ToString() + y.ToString() + z.ToString();
 
 		Regex rgx = new Regex("[^0-9]");    // only allow numbers in this string
 		pos = rgx.Replace(pos, "");
 
 		return pos;
+	}
+
+	public static string GetHexStringFromPosition(Vector3 position)
+	{
+		string pos = GetStringFromPosition(position);
+
+		long decValue = Int64.Parse(pos);
+		string hexValue = decValue.ToString("X");
+
+		return hexValue;
 	}
 
 	// Returns the parent transform that has the component requested; max 10 checks

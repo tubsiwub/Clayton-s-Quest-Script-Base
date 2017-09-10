@@ -40,6 +40,7 @@ public class ScriptStateManager : MonoBehaviour {
 
 	Canvas mainHUDCanvas;
 	ActivatedTimer timerObj;
+	YouDidItScript youDidIt;
 
 	public GameObject puzzleButton;
 	public GameObject triggerBox;
@@ -71,6 +72,7 @@ public class ScriptStateManager : MonoBehaviour {
 		mainCam = Camera.main;
 		mainHUDCanvas = GameObject.Find ("MainHUDCanvas").GetComponent<Canvas>();
 		timerObj = GameObject.Find ("TimerUI").GetComponent<ActivatedTimer> ();
+		youDidIt = GameObject.Find ("WinZone_TextEffect").GetComponent<YouDidItScript> ();
 
 		bottomLetterbox = GameObject.Find ("LetterboxCanvas/PlayerLetterbox_Bottom");
 		topLetterbox = GameObject.Find ("LetterboxCanvas/PlayerLetterbox_Top");
@@ -112,6 +114,8 @@ public class ScriptStateManager : MonoBehaviour {
 		// Set the flag
 		cutsceneActive = true;
 
+		youDidIt.SetCutsceneCheck (true);
+
 		timerObj.PauseTimer ();
 
 		RESET_CUTSCENE ();
@@ -130,6 +134,8 @@ public class ScriptStateManager : MonoBehaviour {
 	public void STOP_CUTSCENE(){
 
 		abortable = false;
+
+		youDidIt.SetCutsceneCheck (false);
 
 		timerObj.UnpauseTimer ();
 
@@ -175,10 +181,6 @@ public class ScriptStateManager : MonoBehaviour {
 
 		// Run cutscene until duration end
 		if (cutsceneActive) {
-
-			// Do letterbox stuff
-			//bottomLB.GetComponent<Image>().enabled = true;
-			//topLB.GetComponent<Image>().enabled = true;
 
 			if (mainCam.gameObject.activeSelf && mainCameraToggle) {
 

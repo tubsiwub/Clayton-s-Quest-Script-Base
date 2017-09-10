@@ -8,15 +8,10 @@ public class PlayerAttack : MonoBehaviour
 	[SerializeField] GameObject rightHand;
 	[SerializeField] GameObject leftHand;
 
-	// Public accessors
 	public GameObject RightHand { get { return rightHand; } }
 	public GameObject LeftHand { get { return leftHand; } }
 
-	//FistHitbox rightHitbox;
-	//FistHitbox leftHitbox;
-
 	PlayerHandler playerHandler;
-	//HumanController humanController;
 
 	bool attacking = false;
 	bool lastAttacking = false;
@@ -26,25 +21,32 @@ public class PlayerAttack : MonoBehaviour
 	public bool IsAttacking { get { return attackState != AttackState.PreAttack; } }
 
 	float hitboxStartSize;
-	const float maxHitboxSize = 175;
-	const float hitboxGrowSpeed = 280;
+	const float MaxHitboxSize = 2.75f;
+	const float HitBoxGrowSpeed = 6.00f;
+
+	int disableStamp = 0;
+	bool RecentlyDisabled { get { return Time.frameCount - disableStamp <= 10; } }
 	
-	void Start()
+	void Awake()
 	{
 		attackState = AttackState.PreAttack;
 		rightHand.SetActive(false);
 		leftHand.SetActive(false);
 
 		hitboxStartSize = rightHand.transform.localScale.x;
-
-		//rightHitbox = rightHand.GetComponent<FistHitbox>();
-		//leftHitbox = leftHand.GetComponent<FistHitbox>();
 		playerHandler = GetComponent<PlayerHandler>();
-		//humanController = GetComponent<HumanController>();
 	}
 
 	void OnDisable()
 	{
+		Disable();
+	}
+
+	void Disable()
+	{
+		if (RecentlyDisabled) return;
+		
+		disableStamp = Time.frameCount;
 		if (humanAnimator.isInitialized)
 		{
 			humanAnimator.SetBool("Attacking", false);
@@ -52,12 +54,13 @@ public class PlayerAttack : MonoBehaviour
 		}
 
 		ResetHitboxSizes();
+		SetAttackState(AttackState.PreAttack);
+		lastAttacking = false;
 	}
 
 	void Update()
 	{
-		if (playerHandler.IsFrozen) return;
-		if (!PlayerHandler.CanUpdate) return;
+		if (!CanAttack()) { Disable(); return; }
 
 		if (Input.GetButtonDown(PlayerHandler.AttackString))
 			attacking = true;
@@ -69,6 +72,16 @@ public class PlayerAttack : MonoBehaviour
 
 		HealthManager.instance.SetExternalIsInvincible
 			(rightHand.activeInHierarchy || leftHand.activeInHierarchy);
+	}
+
+	bool CanAttack()
+	{
+		if (playerHandler.IsFrozen) return false;
+		if (playerHandler.AboutToFallDie) return false;
+		if (!PlayerHandler.CanUpdate) return false;
+		if (HealthManager.instance.IsPaused) return false;
+
+		return true;
 	}
 
 	public void SetAttackState(AttackState newState)		// called from animation states
@@ -92,7 +105,11 @@ public class PlayerAttack : MonoBehaviour
 				leftHand.SetActive(true);
 				// only set face animation in 1 and 3 (carries from 1 to 2)
 				playerHandler.SetFaceAnimation("Angry");
-				StartCoroutine("GrowHitbox", leftHand);
+
+				{
+					object[] info = new object[] { leftHand, true };
+					StartCoroutine("GrowHitbox", info);
+				}
 
 				SoundManager.instance.PlayClip("AttackChain1" + (Random.Range(0, 2) == 0 ? "A" : "B"));
 			break;
@@ -100,7 +117,11 @@ public class PlayerAttack : MonoBehaviour
 			case AttackState.Attack2:
 				rightHand.SetActive(true);
 				leftHand.SetActive(false);
-				StartCoroutine("GrowHitbox", rightHand);
+
+				{
+					object[] info = new object[] { rightHand, true };
+					StartCoroutine("GrowHitbox", info);
+				}
 
 				SoundManager.instance.PlayClip("AttackChain2" + (Random.Range(0, 2) == 0 ? "A" : "B"));
 			break;
@@ -108,29 +129,41 @@ public class PlayerAttack : MonoBehaviour
 			case AttackState.Attack3:
 				rightHand.SetActive(true);
 				leftHand.SetActive(true);
-				StartCoroutine("GrowHitbox", rightHand);
-				StartCoroutine("GrowHitbox", leftHand);
 
-				SoundManager.instance.PlayClip("AttackChain3" + (Random.Range(0, 2) == 0 ? "A" : "B"));
+				{
+					object[] info1 = new object[] { rightHand, false };
+					object[] info2 = new object[] { leftHand, false };
+
+					StartCoroutine("GrowHitbox", info1);
+					StartCoroutine("GrowHitbox", info2);
+				}
+
+				SoundManager.instance.PlayClip("AttackChain3A");// + (Random.Range(0, 2) == 0 ? "A" : "B"));
 			break;
 		}
 	}
 
-	IEnumerator GrowHitbox(GameObject hitbox)
+	IEnumerator GrowHitbox(object[] info)
 	{
+		GameObject hitbox = (GameObject)info[0];
+		bool turnOff = (bool)info[1];
+
 		float scale = hitboxStartSize;
-		while (hitbox.transform.localScale.x < maxHitboxSize)
+		while (hitbox.transform.localScale.x < MaxHitboxSize)
 		{
-			scale += Time.deltaTime * hitboxGrowSpeed;
+			scale += Time.deltaTime * HitBoxGrowSpeed;
 			hitbox.transform.localScale = new Vector3(scale, scale, scale);
 			yield return null;
 		}
+
+		if (turnOff)
+			hitbox.SetActive(false);
 	}
 
 	void ResetHitboxSizes()
 	{
 		StopCoroutine("GrowHitbox");
-
+		
 		Vector3 scale = new Vector3(hitboxStartSize, hitboxStartSize, hitboxStartSize);
 		rightHand.transform.localScale = scale;
 		leftHand.transform.localScale = scale;

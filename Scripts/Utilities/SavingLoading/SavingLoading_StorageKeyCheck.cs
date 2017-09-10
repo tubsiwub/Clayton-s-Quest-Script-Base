@@ -13,12 +13,23 @@ public class SavingLoading_StorageKeyCheck : MonoBehaviour {
 
 	public string storageKey;
 
+	void Awake(){
+
+
+	}
+
 	void Start(){
+		
+		if (GetComponent<Candy_Collect> ()) {
+			storageKey = name;
+			bool check = SavingLoading.instance.LoadStoredCandy(storageKey);
+			if (!check)
+				Destroy (this.gameObject);
+		}
 
 		if (storageKey == "") {
 			Debug.LogError (gameObject.name + " is missing Storage Key!  Please input a value;");
 		}
-
 	}
 
 	// Perform check until turned off
